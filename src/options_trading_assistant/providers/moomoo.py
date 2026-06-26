@@ -384,8 +384,14 @@ class MoomooDataProvider(DataProvider):
             batch = chain[index : index + batch_size]
             option_codes = [str(row["code"]) for row in batch if row.get("code")]
             snapshot_rows = self._option_snapshot_rows(option_codes)
-            for chain_row, snapshot_row in zip(batch, snapshot_rows):
+            snapshots_by_code = {
+                str(snapshot_row.get("code")): snapshot_row
+                for snapshot_row in snapshot_rows
+                if snapshot_row.get("code")
+            }
+            for chain_row in batch:
                 merged = dict(chain_row)
+                snapshot_row = snapshots_by_code.get(str(chain_row.get("code")), {})
                 merged.update({key: value for key, value in snapshot_row.items() if value not in (None, "")})
                 merged["code"] = chain_row.get("code")
                 merged["strike_price"] = chain_row.get("strike_price")
@@ -550,11 +556,13 @@ class MoomooDataProvider(DataProvider):
         vix_closes = self._close_series(vix_history)
         vix = vix_closes[-1]
         previous_vix = vix_closes[-2] if len(vix_closes) >= 2 else vix
+        rising = vix > previous_vix
+        max_vix_if_rising = self.config.strategy["market"]["max_vix_if_rising"]
         return {
             "vix": vix,
-            "rising": vix > previous_vix,
+            "rising": rising,
             "source": vix_symbol,
-            "risk_off": False,
+            "risk_off": vix > max_vix_if_rising and rising,
         }
 
     def _volatility_proxy_signal(self, proxy_symbol: str, as_of: date) -> dict[str, Any]:

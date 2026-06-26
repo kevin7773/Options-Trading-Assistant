@@ -7,5 +7,6 @@ venv/
 env/
 
 data/journal/*.jsonl
+data/journal/decision_packets/
 data/backtests/results/
 excel/outputs/

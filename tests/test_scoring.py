@@ -1,8 +1,8 @@
 from datetime import date
 
 from options_trading_assistant.config import load_config
-from options_trading_assistant.engines.scoring import market_block_reason, score_market, score_options
-from options_trading_assistant.models import MarketSnapshot, OptionSpread
+from options_trading_assistant.engines.scoring import market_block_reason, passes_mean_reversion, score_market, score_options
+from options_trading_assistant.models import MarketSnapshot, OptionSpread, StockSnapshot
 
 
 def test_market_block_reason_when_spy_below_20dma():
@@ -77,3 +77,26 @@ def test_score_options_accepts_valid_priced_spread():
     )
 
     assert score_options(spread, config.strategy["trade"], date(2026, 6, 26)) > 0
+
+
+def test_passes_mean_reversion_uses_configured_pullback_and_rsi_thresholds():
+    stock = StockSnapshot(
+        ticker="TEST",
+        sector="Technology",
+        price=100,
+        above_100dma=True,
+        above_200dma=True,
+        trend_90d=0.1,
+        sector_relative_strength=0.1,
+        drawdown_from_swing_high_pct=4.5,
+        rsi=43,
+        near_support=True,
+        selling_volume_stabilizing=True,
+        making_lower_lows=False,
+    )
+
+    strict_config = {"min_pullback_pct": 5.0, "max_pullback_pct": 12.0, "max_rsi": 42.0}
+    loose_config = {"min_pullback_pct": 4.0, "max_pullback_pct": 12.0, "max_rsi": 45.0}
+
+    assert passes_mean_reversion(stock, strict_config) is False
+    assert passes_mean_reversion(stock, loose_config) is True

@@ -48,6 +48,14 @@ Inspect stock candidates inside a configured sector:
 python -m options_trading_assistant.cli scan-stocks --provider moomoo --sector Healthcare
 ```
 
+Review logged scan outcomes and rejection patterns:
+
+```powershell
+python -m options_trading_assistant.cli review-journal --days 30
+```
+
+Logged scans also write per-decision JSON packets under `data/journal/decision_packets/`.
+
 ## Test
 
 ```powershell

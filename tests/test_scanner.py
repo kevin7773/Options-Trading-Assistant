@@ -14,6 +14,9 @@ def test_balanced_scan_returns_recommendation_with_mock_data():
     assert result.action == RecommendationAction.BUY
     assert result.recommendations
     assert result.recommendations[0].stock.ticker == "ISRG"
+    assert result.context.stocks_scanned > 0
+    assert result.context.spreads_evaluated > 0
+    assert result.context.top_sectors
     assert result.rejections
     assert result.rejected_count == len(result.rejections)
     assert any(rejection.stage == RejectionStage.OPTIONS for rejection in result.rejections)
@@ -43,6 +46,8 @@ def test_market_gate_returns_sit_today_out():
     assert not result.recommendations
     assert result.rejections
     assert result.rejections[0].stage == RejectionStage.MARKET
+    assert result.context.spy_above_20dma is False
+    assert result.context.stocks_scanned == 0
     assert result.rejected_count == 1
 
 

@@ -16,13 +16,21 @@ from options_trading_assistant.engines.scoring import (
 from options_trading_assistant.models import (
     OptionSpread,
     RecommendationAction,
+    RejectedCandidate,
     ScanResult,
     SectorSnapshot,
     StockSnapshot,
     TradeCandidate,
 )
 from options_trading_assistant.providers.factory import build_provider
+from options_trading_assistant.reports.decision_packets import write_decision_packets
 from options_trading_assistant.reports.journal import append_scan_result
+from options_trading_assistant.reports.journal_review import (
+    filter_scan_records,
+    format_journal_review,
+    load_scan_records,
+    summarize_scan_records,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +59,12 @@ def parse_args() -> argparse.Namespace:
     scan_stocks.add_argument("--mode", default=None, help="Scanner mode for confirmation thresholds.")
     scan_stocks.add_argument("--date", dest="as_of", default=None, help="Scan date in YYYY-MM-DD format.")
     scan_stocks.add_argument("--limit", type=int, default=20, help="Maximum number of stocks to show.")
+
+    review_journal = subparsers.add_parser("review-journal", help="Summarize logged scan recommendations and rejections.")
+    review_journal.add_argument("--days", type=int, default=None, help="Only include scans from the last N days.")
+    review_journal.add_argument("--ticker", default=None, help="Only include scans mentioning this ticker.")
+    review_journal.add_argument("--stage", default=None, help="Only include scans with this rejection stage.")
+    review_journal.add_argument("--limit", type=int, default=10, help="Maximum rows per summary section.")
 
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
@@ -107,11 +121,43 @@ def format_result(result: ScanResult) -> str:
         f"Reason: {result.reason}",
     ]
 
+    rejection_summary = format_rejection_summary(result.rejections)
+
     if result.action == RecommendationAction.SIT_TODAY_OUT:
-        return "\n".join(header)
+        return "\n".join(header + rejection_summary)
 
     sections = ["\n---\n" + format_candidate(candidate) for candidate in result.recommendations]
-    return "\n".join(header + sections)
+    return "\n".join(header + sections + rejection_summary)
+
+
+def rejection_label(rejection: RejectedCandidate) -> str:
+    if rejection.ticker and rejection.long_call is not None and rejection.short_call is not None:
+        return f"{rejection.ticker} {rejection.long_call:g}/{rejection.short_call:g}"
+    if rejection.ticker:
+        return rejection.ticker
+    if rejection.sector:
+        return rejection.sector
+    return rejection.stage.value
+
+
+def format_rejection_summary(rejections: tuple[RejectedCandidate, ...], limit: int = 8) -> list[str]:
+    if not rejections:
+        return []
+
+    lines = [
+        "",
+        "Rejected Candidates:",
+    ]
+    for rejection in rejections[:limit]:
+        reasons = "; ".join(rejection.reasons[:3])
+        if len(rejection.reasons) > 3:
+            reasons += f"; +{len(rejection.reasons) - 3} more"
+        score_text = f" score={rejection.score:.2f}" if rejection.score is not None else ""
+        lines.append(f"- [{rejection.stage.value}] {rejection_label(rejection)}{score_text}: {reasons}")
+
+    if len(rejections) > limit:
+        lines.append(f"- ... {len(rejections) - limit} more rejection(s)")
+    return lines
 
 
 def format_option_spread(spread: OptionSpread, options_score: float) -> str:
@@ -182,9 +228,19 @@ def format_sector_ranking(as_of: date, ranked_sectors: list[tuple[SectorSnapshot
     return "\n".join(lines)
 
 
-def stock_rejection_reasons(stock: StockSnapshot, trend_score_value: float, confirmation_score_value: float, required_signals: int) -> list[str]:
+def stock_rejection_reasons(
+    stock: StockSnapshot,
+    trend_score_value: float,
+    confirmation_score_value: float,
+    required_signals: int,
+    strategy_config: dict,
+) -> list[str]:
     reasons = []
-    if trend_score_value < 14:
+    trend_config = strategy_config["trend"]
+    mean_reversion_config = strategy_config["mean_reversion"]
+    confirmation_config = strategy_config["confirmation"]
+
+    if trend_score_value < trend_config["minimum_score"]:
         reasons.append("trend score below threshold")
     if not stock.above_100dma:
         reasons.append("below 100 DMA")
@@ -194,9 +250,17 @@ def stock_rejection_reasons(stock: StockSnapshot, trend_score_value: float, conf
         reasons.append("negative 90-day trend")
     if stock.making_lower_lows:
         reasons.append("making lower lows")
-    if not (5.0 <= stock.drawdown_from_swing_high_pct <= 12.0):
-        reasons.append("pullback not in 5-12% controlled range")
-    if stock.rsi > 42.0:
+    if not (
+        mean_reversion_config["min_pullback_pct"]
+        <= stock.drawdown_from_swing_high_pct
+        <= mean_reversion_config["max_pullback_pct"]
+    ):
+        reasons.append(
+            "pullback not in "
+            f"{mean_reversion_config['min_pullback_pct']:g}-{mean_reversion_config['max_pullback_pct']:g}% "
+            "controlled range"
+        )
+    if stock.rsi > mean_reversion_config["max_rsi"]:
         reasons.append("RSI not low enough for mean-reversion setup")
     if not stock.near_support:
         reasons.append("not near support")
@@ -204,7 +268,7 @@ def stock_rejection_reasons(stock: StockSnapshot, trend_score_value: float, conf
         reasons.append("selling volume not stabilizing")
     if stock.company_specific_warning:
         reasons.append("company-specific warning")
-    if len(stock.confirmation_signals) < required_signals or confirmation_score_value < 12:
+    if len(stock.confirmation_signals) < required_signals or confirmation_score_value < confirmation_config["minimum_score"]:
         reasons.append(f"insufficient confirmation signals ({len(stock.confirmation_signals)}/{required_signals})")
     return reasons
 
@@ -370,12 +434,30 @@ def run_stock_scan(args: argparse.Namespace) -> None:
     for stock in stocks:
         trend_score_value = score_trend(stock)
         confirmation_score_value = score_confirmation(stock, required_signals)
-        mean_reversion_pass = passes_mean_reversion(stock)
-        reasons = stock_rejection_reasons(stock, trend_score_value, confirmation_score_value, required_signals)
+        mean_reversion_pass = passes_mean_reversion(stock, config.strategy["mean_reversion"])
+        reasons = stock_rejection_reasons(
+            stock,
+            trend_score_value,
+            confirmation_score_value,
+            required_signals,
+            config.strategy,
+        )
         rows.append((stock, trend_score_value, confirmation_score_value, mean_reversion_pass, reasons))
 
     ranked = sorted(rows, key=lambda item: (not item[4], item[1] + item[2]), reverse=True)[: args.limit]
     print(format_stock_scan(args.sector, as_of, ranked))
+
+
+def run_journal_review(args: argparse.Namespace) -> None:
+    records = load_scan_records()
+    filtered = filter_scan_records(
+        records,
+        days=args.days,
+        ticker=args.ticker,
+        stage=args.stage,
+    )
+    summary = summarize_scan_records(filtered)
+    print(format_journal_review(summary, limit=args.limit))
 
 
 def run_scan(args: argparse.Namespace) -> None:
@@ -397,6 +479,8 @@ def run_scan(args: argparse.Namespace) -> None:
     if not args.no_log:
         path = append_scan_result(result)
         print(f"\nLogged scan result to: {path}")
+        packet_paths = write_decision_packets(result)
+        print(f"Logged decision packets: {len(packet_paths)}")
 
 
 def main() -> None:
@@ -410,6 +494,8 @@ def main() -> None:
             run_sector_ranking(args)
         elif args.command == "scan-stocks":
             run_stock_scan(args)
+        elif args.command == "review-journal":
+            run_journal_review(args)
         else:
             run_scan(args)
     except RuntimeError as exc:

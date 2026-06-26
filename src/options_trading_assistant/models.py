@@ -144,6 +144,31 @@ class RejectedCandidate:
 
 
 @dataclass(frozen=True)
+class RankedSector:
+    sector: str
+    etf: str
+    score: float
+    rank: int
+    eligible: bool
+
+
+@dataclass(frozen=True)
+class ScanContext:
+    spy_above_20dma: bool | None = None
+    nasdaq_above_20dma: bool | None = None
+    vix: float | None = None
+    vix_rising: bool | None = None
+    volatility_source: str | None = None
+    volatility_risk_off: bool | None = None
+    distribution_days: int | None = None
+    breadth_score: float | None = None
+    growth_participation_score: float | None = None
+    top_sectors: tuple[RankedSector, ...] = field(default_factory=tuple)
+    stocks_scanned: int = 0
+    spreads_evaluated: int = 0
+
+
+@dataclass(frozen=True)
 class ScanResult:
     action: RecommendationAction
     mode: str
@@ -151,6 +176,7 @@ class ScanResult:
     as_of: date
     reason: str
     market_score: float
+    context: ScanContext = field(default_factory=ScanContext)
     recommendations: tuple[TradeCandidate, ...] = field(default_factory=tuple)
     rejections: tuple[RejectedCandidate, ...] = field(default_factory=tuple)
     rejected_count: int = 0

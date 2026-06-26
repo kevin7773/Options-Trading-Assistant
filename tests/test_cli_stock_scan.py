@@ -1,6 +1,7 @@
 from datetime import date
 
 from options_trading_assistant.cli import format_stock_scan, stock_rejection_reasons
+from options_trading_assistant.config import load_config
 from options_trading_assistant.models import StockSnapshot
 
 
@@ -21,7 +22,13 @@ def test_stock_rejection_reasons_identifies_failed_filters():
         confirmation_signals=("higher_low",),
     )
 
-    reasons = stock_rejection_reasons(stock, trend_score_value=9, confirmation_score_value=5, required_signals=2)
+    reasons = stock_rejection_reasons(
+        stock,
+        trend_score_value=9,
+        confirmation_score_value=5,
+        required_signals=2,
+        strategy_config=load_config().strategy,
+    )
 
     assert "trend score below threshold" in reasons
     assert "below 100 DMA" in reasons

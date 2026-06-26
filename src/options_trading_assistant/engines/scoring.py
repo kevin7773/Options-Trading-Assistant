@@ -67,9 +67,13 @@ def score_trend(stock: StockSnapshot) -> float:
     return round(score, 2)
 
 
-def passes_mean_reversion(stock: StockSnapshot) -> bool:
-    controlled_pullback = 5.0 <= stock.drawdown_from_swing_high_pct <= 12.0
-    constructive_rsi = stock.rsi <= 42.0
+def passes_mean_reversion(stock: StockSnapshot, mean_reversion_config: dict) -> bool:
+    controlled_pullback = (
+        mean_reversion_config["min_pullback_pct"]
+        <= stock.drawdown_from_swing_high_pct
+        <= mean_reversion_config["max_pullback_pct"]
+    )
+    constructive_rsi = stock.rsi <= mean_reversion_config["max_rsi"]
     return (
         controlled_pullback
         and constructive_rsi
@@ -101,13 +105,16 @@ def score_options(spread: OptionSpread, trade_config: dict, as_of: date) -> floa
     score = 0.0
     score += 2.0 if trade_config["min_days_to_expiration"] <= dte <= trade_config["max_days_to_expiration"] else 0.0
     score += 2.0 if spread.width in trade_config["preferred_spread_widths"] else 0.0
-    score += 2.0 if 0.35 <= spread.long_delta <= 0.55 else 0.0
+    score += 2.0 if trade_config["min_long_delta"] <= spread.long_delta <= trade_config["max_long_delta"] else 0.0
     score += 2.0 if spread.max_loss <= trade_config["max_debit_per_spread"] else 0.0
     score += 2.0 if spread.reward_to_risk >= trade_config["min_reward_to_risk"] else 0.0
-    score += 2.0 if spread.long_open_interest >= 500 and spread.short_open_interest >= 500 else 0.0
-    score += 1.5 if spread.bid_ask_width_pct <= 0.10 else 0.0
+    score += 2.0 if (
+        spread.long_open_interest >= trade_config["min_open_interest"]
+        and spread.short_open_interest >= trade_config["min_open_interest"]
+    ) else 0.0
+    score += 1.5 if spread.bid_ask_width_pct <= trade_config["max_bid_ask_width_pct"] else 0.0
     score += 1.0 * clamp(spread.volume_score)
-    score += 0.5 if spread.iv_rank <= 0.60 else 0.0
+    score += 0.5 if spread.iv_rank <= trade_config["max_iv_rank"] else 0.0
     return round(min(score, 15.0), 2)
 
 

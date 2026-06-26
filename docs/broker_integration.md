@@ -44,6 +44,12 @@ Inspect stock-level filters inside one configured sector with:
 python -m options_trading_assistant.cli scan-stocks --provider moomoo --sector Healthcare
 ```
 
+Review logged scan outcomes and rejection patterns with:
+
+```powershell
+python -m options_trading_assistant.cli review-journal --days 30
+```
+
 Paper trading and live order placement remain intentionally separate from the market-data provider.
 
 ## Volatility Data

@@ -34,6 +34,22 @@ trade:
   max_debit_per_spread: 250
   min_reward_to_risk: 1.5
   preferred_spread_widths: [1, 5]
+  min_long_delta: 0.35
+  max_long_delta: 0.55
+  min_open_interest: 500
+  max_bid_ask_width_pct: 0.10
+  max_iv_rank: 0.60
+
+trend:
+  minimum_score: 14
+
+mean_reversion:
+  min_pullback_pct: 5.0
+  max_pullback_pct: 12.0
+  max_rsi: 42.0
+
+confirmation:
+  minimum_score: 12
 
 cooling_off:
   enabled: true
