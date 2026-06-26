@@ -12,6 +12,16 @@ class RecommendationAction(str, Enum):
     SIT_TODAY_OUT = "SIT TODAY OUT"
 
 
+class RejectionStage(str, Enum):
+    MARKET = "market"
+    SECTOR = "sector"
+    TREND = "trend"
+    MEAN_REVERSION = "mean_reversion"
+    CONFIRMATION = "confirmation"
+    OPTIONS = "options"
+    SCORING = "scoring"
+
+
 @dataclass(frozen=True)
 class MarketSnapshot:
     as_of: date
@@ -122,6 +132,18 @@ class TradeCandidate:
 
 
 @dataclass(frozen=True)
+class RejectedCandidate:
+    stage: RejectionStage
+    reasons: tuple[str, ...]
+    ticker: str | None = None
+    sector: str | None = None
+    expiration: date | None = None
+    long_call: float | None = None
+    short_call: float | None = None
+    score: float | None = None
+
+
+@dataclass(frozen=True)
 class ScanResult:
     action: RecommendationAction
     mode: str
@@ -130,6 +152,7 @@ class ScanResult:
     reason: str
     market_score: float
     recommendations: tuple[TradeCandidate, ...] = field(default_factory=tuple)
+    rejections: tuple[RejectedCandidate, ...] = field(default_factory=tuple)
     rejected_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
