@@ -6,8 +6,21 @@ import sys
 
 from options_trading_assistant.config import load_config
 from options_trading_assistant.engines.scanner import DailyScanner
-from options_trading_assistant.engines.scoring import score_options, score_sector
-from options_trading_assistant.models import OptionSpread, RecommendationAction, ScanResult, SectorSnapshot, TradeCandidate
+from options_trading_assistant.engines.scoring import (
+    passes_mean_reversion,
+    score_confirmation,
+    score_options,
+    score_sector,
+    score_trend,
+)
+from options_trading_assistant.models import (
+    OptionSpread,
+    RecommendationAction,
+    ScanResult,
+    SectorSnapshot,
+    StockSnapshot,
+    TradeCandidate,
+)
 from options_trading_assistant.providers.factory import build_provider
 from options_trading_assistant.reports.journal import append_scan_result
 
@@ -31,6 +44,13 @@ def parse_args() -> argparse.Namespace:
     rank_sectors.add_argument("--provider", default="moomoo", help="Data provider to use.")
     rank_sectors.add_argument("--date", dest="as_of", default=None, help="Ranking date in YYYY-MM-DD format.")
     rank_sectors.add_argument("--limit", type=int, default=13, help="Maximum number of sectors to show.")
+
+    scan_stocks = subparsers.add_parser("scan-stocks", help="Inspect stock candidates within one configured sector.")
+    scan_stocks.add_argument("--provider", default="moomoo", help="Data provider to use.")
+    scan_stocks.add_argument("--sector", required=True, help="Configured sector name to scan.")
+    scan_stocks.add_argument("--mode", default=None, help="Scanner mode for confirmation thresholds.")
+    scan_stocks.add_argument("--date", dest="as_of", default=None, help="Scan date in YYYY-MM-DD format.")
+    scan_stocks.add_argument("--limit", type=int, default=20, help="Maximum number of stocks to show.")
 
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
@@ -162,6 +182,72 @@ def format_sector_ranking(as_of: date, ranked_sectors: list[tuple[SectorSnapshot
     return "\n".join(lines)
 
 
+def stock_rejection_reasons(stock: StockSnapshot, trend_score_value: float, confirmation_score_value: float, required_signals: int) -> list[str]:
+    reasons = []
+    if trend_score_value < 14:
+        reasons.append("trend score below threshold")
+    if not stock.above_100dma:
+        reasons.append("below 100 DMA")
+    if not stock.above_200dma:
+        reasons.append("below 200 DMA")
+    if stock.trend_90d < 0:
+        reasons.append("negative 90-day trend")
+    if stock.making_lower_lows:
+        reasons.append("making lower lows")
+    if not (5.0 <= stock.drawdown_from_swing_high_pct <= 12.0):
+        reasons.append("pullback not in 5-12% controlled range")
+    if stock.rsi > 42.0:
+        reasons.append("RSI not low enough for mean-reversion setup")
+    if not stock.near_support:
+        reasons.append("not near support")
+    if not stock.selling_volume_stabilizing:
+        reasons.append("selling volume not stabilizing")
+    if stock.company_specific_warning:
+        reasons.append("company-specific warning")
+    if len(stock.confirmation_signals) < required_signals or confirmation_score_value < 12:
+        reasons.append(f"insufficient confirmation signals ({len(stock.confirmation_signals)}/{required_signals})")
+    return reasons
+
+
+def format_stock_scan(
+    sector_name: str,
+    as_of: date,
+    rows: list[tuple[StockSnapshot, float, float, bool, list[str]]],
+) -> str:
+    lines = [
+        f"Sector: {sector_name}",
+        f"Date: {as_of.isoformat()}",
+        f"Stocks Scanned: {len(rows)}",
+        "",
+        "Ticker | Price | Trend | Confirmation | Pullback | RSI | >100DMA | >200DMA | Support | Volume Stable | Pass | Reasons",
+        "--- | ---: | ---: | ---: | ---: | ---: | :---: | :---: | :---: | :---: | :---: | ---",
+    ]
+    for stock, trend_score_value, confirmation_score_value, mean_reversion_pass, reasons in rows:
+        passes = mean_reversion_pass and trend_score_value >= 14 and confirmation_score_value >= 12 and not reasons
+        reason_text = "; ".join(reasons) if reasons else "eligible for options scan"
+        lines.append(
+            " | ".join(
+                [
+                    stock.ticker,
+                    f"${stock.price:.2f}",
+                    f"{trend_score_value:.2f}/20",
+                    f"{confirmation_score_value:.2f}/20",
+                    f"{stock.drawdown_from_swing_high_pct:.1f}%",
+                    f"{stock.rsi:.1f}",
+                    "Y" if stock.above_100dma else "N",
+                    "Y" if stock.above_200dma else "N",
+                    "Y" if stock.near_support else "N",
+                    "Y" if stock.selling_volume_stabilizing else "N",
+                    "Y" if passes else "N",
+                    reason_text,
+                ]
+            )
+        )
+        if stock.confirmation_signals:
+            lines.append(f"  confirmations: {', '.join(stock.confirmation_signals)}")
+    return "\n".join(lines)
+
+
 def format_diagnostics(report: dict) -> str:
     lines = [
         f"Provider: {report['provider']}",
@@ -266,6 +352,32 @@ def run_sector_ranking(args: argparse.Namespace) -> None:
     print(format_sector_ranking(as_of, ranked))
 
 
+def run_stock_scan(args: argparse.Namespace) -> None:
+    config = load_config()
+    as_of = parse_scan_date(args.as_of)
+    selected_mode = args.mode or config.strategy["default_mode"]
+    mode_config = config.strategy["modes"][selected_mode]
+    provider = build_provider(args.provider, config)
+    try:
+        stocks = provider.get_stocks_for_sector(args.sector, as_of)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    required_signals = mode_config["confirmation_signals_required"]
+    rows = []
+    for stock in stocks:
+        trend_score_value = score_trend(stock)
+        confirmation_score_value = score_confirmation(stock, required_signals)
+        mean_reversion_pass = passes_mean_reversion(stock)
+        reasons = stock_rejection_reasons(stock, trend_score_value, confirmation_score_value, required_signals)
+        rows.append((stock, trend_score_value, confirmation_score_value, mean_reversion_pass, reasons))
+
+    ranked = sorted(rows, key=lambda item: (not item[4], item[1] + item[2]), reverse=True)[: args.limit]
+    print(format_stock_scan(args.sector, as_of, ranked))
+
+
 def run_scan(args: argparse.Namespace) -> None:
     config = load_config()
     selected_mode = args.mode or config.strategy["default_mode"]
@@ -296,6 +408,8 @@ def main() -> None:
             run_option_scan(args)
         elif args.command == "rank-sectors":
             run_sector_ranking(args)
+        elif args.command == "scan-stocks":
+            run_stock_scan(args)
         else:
             run_scan(args)
     except RuntimeError as exc:

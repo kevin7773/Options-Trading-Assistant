@@ -4,6 +4,8 @@ This project turns the `Mean_Reversion_Bull_Call_Scanner_v4.md` strategy brief i
 
 The first implementation is intentionally broker-neutral. It uses deterministic mock data so the scoring, filtering, logging, and CLI can be validated before any live market data or paper-trading API is connected.
 
+Read `ARCHITECTURE.md` before making strategy or provider changes. It is the project constitution.
+
 ## Run
 
 Install the package in editable mode first:
@@ -38,6 +40,12 @@ Rank configured sectors with provider data:
 
 ```powershell
 python -m options_trading_assistant.cli rank-sectors --provider moomoo
+```
+
+Inspect stock candidates inside a configured sector:
+
+```powershell
+python -m options_trading_assistant.cli scan-stocks --provider moomoo --sector Healthcare
 ```
 
 ## Test

@@ -38,6 +38,12 @@ Rank configured sectors with:
 python -m options_trading_assistant.cli rank-sectors --provider moomoo
 ```
 
+Inspect stock-level filters inside one configured sector with:
+
+```powershell
+python -m options_trading_assistant.cli scan-stocks --provider moomoo --sector Healthcare
+```
+
 Paper trading and live order placement remain intentionally separate from the market-data provider.
 
 ## Volatility Data
