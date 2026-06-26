@@ -1,0 +1,31 @@
+[project]
+name = "options-trading-assistant"
+version = "0.1.0"
+description = "Disciplined mean-reversion bull call spread scanner."
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+moomoo = [
+    "moomoo-api>=10.8.6808",
+    "pandas>=3.0.0",
+]
+
+[project.scripts]
+ota-scan = "options_trading_assistant.cli:main"
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

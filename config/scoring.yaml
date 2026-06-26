@@ -1,0 +1,18 @@
+weights:
+  market: 0.30
+  sector: 0.15
+  trend: 0.20
+  confirmation: 0.20
+  options: 0.15
+
+category_points:
+  market: 30
+  sector: 15
+  trend: 20
+  confirmation: 20
+  options: 15
+
+thresholds:
+  strong_buy: 90
+  buy: 80
+  watchlist: 70

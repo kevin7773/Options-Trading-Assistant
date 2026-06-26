@@ -1,0 +1,40 @@
+strategy_name: mean_reversion_bull_call_v4
+strategy_version: v4.0
+default_mode: balanced
+
+modes:
+  conservative:
+    minimum_market_score: 24
+    minimum_trade_score: 90
+    max_recommendations: 2
+    max_sectors: 3
+    confirmation_signals_required: 3
+  balanced:
+    minimum_market_score: 21
+    minimum_trade_score: 80
+    max_recommendations: 3
+    max_sectors: 4
+    confirmation_signals_required: 2
+  aggressive:
+    minimum_market_score: 18
+    minimum_trade_score: 72
+    max_recommendations: 5
+    max_sectors: 5
+    confirmation_signals_required: 2
+
+market:
+  require_nasdaq_above_20dma: true
+  require_spy_above_20dma: true
+  max_vix_if_rising: 22
+  max_distribution_days: 2
+
+trade:
+  min_days_to_expiration: 21
+  max_days_to_expiration: 35
+  max_debit_per_spread: 250
+  min_reward_to_risk: 1.5
+  preferred_spread_widths: [1, 5]
+
+cooling_off:
+  enabled: true
+  failed_trades_before_pause: 2

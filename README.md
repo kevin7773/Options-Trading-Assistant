@@ -6,8 +6,20 @@ The first implementation is intentionally broker-neutral. It uses deterministic 
 
 ## Run
 
+Install the package in editable mode first:
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
 ```powershell
 python -m options_trading_assistant.cli --mode balanced
+```
+
+To use Moomoo OpenD for live market data, make sure OpenD is running locally and then run:
+
+```powershell
+python -m options_trading_assistant.cli --provider moomoo --mode balanced
 ```
 
 ## Test
@@ -21,6 +33,7 @@ python -m pytest
 - Config-driven strategy thresholds and scoring weights.
 - Broker-independent data provider interface.
 - Mock market, sector, stock, and option spread data.
+- Optional read-only Moomoo OpenD market-data provider.
 - Market gate that can return `SIT TODAY OUT`.
 - Ranked candidate recommendations when setups meet thresholds.
 - JSONL scan logging under `data/journal/`.

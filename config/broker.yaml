@@ -1,0 +1,15 @@
+active_provider: mock
+
+providers:
+  mock:
+    description: Deterministic local provider for development and tests.
+  moomoo:
+    enabled: false
+    host: 127.0.0.1
+    port: 11111
+    connect_timeout_seconds: 3
+    market_prefix: US
+    market_index:
+      spy: SPY
+      nasdaq_proxy: QQQ
+      vix: US..VIX

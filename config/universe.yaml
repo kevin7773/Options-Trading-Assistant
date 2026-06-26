@@ -1,0 +1,40 @@
+sectors:
+  Technology:
+    etfs: [XLK]
+    tickers: [MSFT, AAPL, CRM]
+  Semiconductors:
+    etfs: [SMH, SOXX]
+    tickers: [NVDA, AMD, AVGO]
+  Cybersecurity:
+    etfs: [CIBR, HACK]
+    tickers: [PANW, CRWD, FTNT]
+  Cloud / SaaS:
+    etfs: [SKYY, WCLD]
+    tickers: [SNOW, DDOG, NET]
+  Industrials:
+    etfs: [XLI]
+    tickers: [CAT, GE, HON]
+  Aerospace & Defense:
+    etfs: [ITA, XAR]
+    tickers: [LMT, RTX, NOC]
+  Financials:
+    etfs: [XLF]
+    tickers: [JPM, GS, MS]
+  Healthcare:
+    etfs: [XLV]
+    tickers: [LLY, UNH, ISRG]
+  Energy:
+    etfs: [XLE]
+    tickers: [XOM, CVX, COP]
+  Utilities:
+    etfs: [XLU]
+    tickers: [NEE, SO, DUK]
+  Consumer Discretionary:
+    etfs: [XLY]
+    tickers: [AMZN, TSLA, HD]
+  Consumer Staples:
+    etfs: [XLP]
+    tickers: [COST, PG, KO]
+  Communication Services:
+    etfs: [XLC]
+    tickers: [META, GOOGL, NFLX]
