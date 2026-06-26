@@ -51,9 +51,10 @@ class MoomooDataProvider(DataProvider):
         spy_symbol = self.market_index.get("spy", "SPY")
         nasdaq_symbol = self.market_index.get("nasdaq_proxy", "QQQ")
         vix_symbol = self.market_index.get("vix", "US..VIX")
+        volatility_proxy_symbol = self.market_index.get("volatility_proxy", "VIXY")
         spy = self._history(spy_symbol, as_of, days=80)
         qqq = self._history(nasdaq_symbol, as_of, days=80)
-        vix, previous_vix = self._vix_level_and_previous(vix_symbol, as_of)
+        volatility = self._volatility_signal(vix_symbol, volatility_proxy_symbol, as_of)
 
         breadth_proxy = self._breadth_proxy(as_of)
         growth_proxy = 1.0 if self._last_close(qqq) > self._moving_average(qqq, 20) else 0.35
@@ -62,8 +63,10 @@ class MoomooDataProvider(DataProvider):
             as_of=as_of,
             spy_above_20dma=self._last_close(spy) > self._moving_average(spy, 20),
             nasdaq_above_20dma=self._last_close(qqq) > self._moving_average(qqq, 20),
-            vix=vix,
-            vix_rising=vix > previous_vix,
+            vix=volatility["vix"],
+            vix_rising=volatility["rising"],
+            volatility_source=volatility["source"],
+            volatility_risk_off=volatility["risk_off"],
             distribution_days=self._distribution_days(spy),
             breadth_score=breadth_proxy,
             growth_participation_score=growth_proxy,
@@ -131,7 +134,7 @@ class MoomooDataProvider(DataProvider):
             return ()
 
         expiration = min(eligible, key=lambda item: abs((item - as_of).days - 28))
-        chain = self._option_chain(ticker, expiration)
+        chain = self._enriched_option_chain(ticker, expiration)
         calls = self._call_rows(chain)
         if not calls:
             return ()
@@ -150,6 +153,33 @@ class MoomooDataProvider(DataProvider):
                 if spread.debit > 0:
                     candidates.append(spread)
         return tuple(candidates[:8])
+
+    def diagnose_ticker(self, ticker: str, as_of: date) -> dict[str, Any]:
+        """Inspect live Moomoo response shapes for one ticker."""
+        report: dict[str, Any] = {
+            "provider": "moomoo",
+            "host": self.settings.host,
+            "port": self.settings.port,
+            "ticker": ticker,
+            "code": self._code(ticker),
+            "as_of": as_of.isoformat(),
+            "sections": {},
+        }
+
+        report["sections"]["history"] = self._diagnose_history(ticker, as_of)
+        report["sections"]["quote_snapshot"] = self._diagnose_snapshot(ticker)
+        report["sections"]["option_expirations"] = self._diagnose_option_expirations(ticker, as_of)
+
+        expiration = report["sections"]["option_expirations"].get("selected_expiration")
+        if expiration:
+            report["sections"]["option_chain"] = self._diagnose_option_chain(ticker, date.fromisoformat(expiration))
+        else:
+            report["sections"]["option_chain"] = {
+                "ok": False,
+                "error": "No eligible expiration was available for option-chain diagnostics.",
+            }
+
+        return report
 
     def _quote(self):
         if self._quote_ctx is None:
@@ -201,6 +231,112 @@ class MoomooDataProvider(DataProvider):
             )
         return data
 
+    def _diagnose_history(self, ticker: str, as_of: date) -> dict[str, Any]:
+        try:
+            records = self._history(ticker, as_of, days=80)
+        except MoomooProviderError as exc:
+            return {"ok": False, "error": str(exc)}
+        columns = sorted(records[0].keys()) if records else []
+        return {
+            "ok": True,
+            "rows": len(records),
+            "columns": columns,
+            "required_fields": self._field_coverage(
+                columns,
+                {
+                    "date/time": ["time_key", "date", "datetime"],
+                    "open": ["open"],
+                    "high": ["high"],
+                    "low": ["low"],
+                    "close": ["close", "last_close", "close_price"],
+                    "volume": ["volume"],
+                },
+            ),
+            "sample": self._sample_row(records),
+        }
+
+    def _diagnose_snapshot(self, ticker: str) -> dict[str, Any]:
+        try:
+            records = self._snapshot([ticker])
+        except MoomooProviderError as exc:
+            return {"ok": False, "error": str(exc)}
+        columns = sorted(records[0].keys()) if records else []
+        return {
+            "ok": True,
+            "rows": len(records),
+            "columns": columns,
+            "required_fields": self._field_coverage(
+                columns,
+                {
+                    "last price": ["last_price", "cur_price", "price"],
+                    "previous close": ["prev_close_price", "prev_close"],
+                    "volume": ["volume"],
+                },
+            ),
+            "sample": self._sample_row(records),
+        }
+
+    def _diagnose_option_expirations(self, ticker: str, as_of: date) -> dict[str, Any]:
+        try:
+            records = self._records(self._call("get_option_expiration_date", self._code(ticker)))
+        except MoomooProviderError as exc:
+            return {"ok": False, "error": str(exc)}
+
+        expirations: list[date] = []
+        for row in records:
+            raw = self._row_value(row, ["strike_time", "expiration_date", "date"])
+            if raw:
+                expirations.append(date.fromisoformat(str(raw)[:10]))
+
+        eligible = [
+            expiry for expiry in expirations
+            if self.config.strategy["trade"]["min_days_to_expiration"]
+            <= (expiry - as_of).days
+            <= self.config.strategy["trade"]["max_days_to_expiration"]
+        ]
+        selected = min(eligible, key=lambda item: abs((item - as_of).days - 28)) if eligible else None
+        columns = sorted(records[0].keys()) if records else []
+        return {
+            "ok": True,
+            "rows": len(records),
+            "columns": columns,
+            "expirations": [expiry.isoformat() for expiry in sorted(set(expirations))[:12]],
+            "eligible_expirations": [expiry.isoformat() for expiry in sorted(set(eligible))],
+            "selected_expiration": selected.isoformat() if selected else None,
+            "sample": self._sample_row(records),
+        }
+
+    def _diagnose_option_chain(self, ticker: str, expiration: date) -> dict[str, Any]:
+        try:
+            records = self._enriched_option_chain(ticker, expiration)
+        except MoomooProviderError as exc:
+            return {"ok": False, "error": str(exc)}
+        columns = sorted(records[0].keys()) if records else []
+        calls = self._call_rows(records)
+        return {
+            "ok": True,
+            "expiration": expiration.isoformat(),
+            "rows": len(records),
+            "call_rows": len(calls),
+            "columns": columns,
+            "required_fields": self._field_coverage(
+                columns,
+                {
+                    "option type": ["option_type", "type"],
+                    "strike": ["strike_price", "option_strike_price", "strike"],
+                    "bid": ["bid_price", "bid"],
+                    "ask": ["ask_price", "ask"],
+                    "last": ["last_price", "price", "mark_price"],
+                    "mid": ["mid_price"],
+                    "delta": ["delta", "option_delta"],
+                    "open interest": ["open_interest", "option_open_interest", "oi"],
+                    "volume": ["volume"],
+                    "implied volatility": ["implied_volatility", "option_implied_volatility", "iv"],
+                },
+            ),
+            "sample": self._sample_row(records),
+        }
+
     def _snapshot(self, tickers: list[str]) -> list[dict[str, Any]]:
         data = self._call("get_market_snapshot", [self._code(ticker) for ticker in tickers])
         return self._records(data)
@@ -237,6 +373,35 @@ class MoomooDataProvider(DataProvider):
         )
         return self._records(data)
 
+    def _enriched_option_chain(self, ticker: str, expiration: date) -> list[dict[str, Any]]:
+        chain = self._option_chain(ticker, expiration)
+        if not chain:
+            return []
+
+        enriched: list[dict[str, Any]] = []
+        batch_size = 4
+        for index in range(0, len(chain), batch_size):
+            batch = chain[index : index + batch_size]
+            option_codes = [str(row["code"]) for row in batch if row.get("code")]
+            snapshot_rows = self._option_snapshot_rows(option_codes)
+            for chain_row, snapshot_row in zip(batch, snapshot_rows):
+                merged = dict(chain_row)
+                merged.update({key: value for key, value in snapshot_row.items() if value not in (None, "")})
+                merged["code"] = chain_row.get("code")
+                merged["strike_price"] = chain_row.get("strike_price")
+                merged["option_type"] = chain_row.get("option_type")
+                enriched.append(merged)
+        return enriched
+
+    def _option_snapshot_rows(self, option_codes: list[str]) -> list[dict[str, Any]]:
+        if not option_codes:
+            return []
+        rows = self._snapshot(option_codes)
+        if len(rows) != len(option_codes):
+            by_code = {str(row.get("code")): row for row in rows}
+            return [by_code.get(code, {"code": code}) for code in option_codes]
+        return rows
+
     @staticmethod
     def _records(data) -> list[dict[str, Any]]:
         if hasattr(data, "to_dict"):
@@ -244,6 +409,26 @@ class MoomooDataProvider(DataProvider):
         if isinstance(data, list):
             return data
         return []
+
+    @staticmethod
+    def _field_coverage(columns: list[str], field_aliases: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
+        column_set = set(columns)
+        coverage = {}
+        for field, aliases in field_aliases.items():
+            matched = [alias for alias in aliases if alias in column_set]
+            coverage[field] = {
+                "ok": bool(matched),
+                "matched": matched,
+                "aliases": aliases,
+            }
+        return coverage
+
+    @staticmethod
+    def _sample_row(records: list[dict[str, Any]]) -> dict[str, Any]:
+        if not records:
+            return {}
+        row = records[0]
+        return {key: str(value)[:80] for key, value in row.items()}
 
     @staticmethod
     def _row_value(row: dict[str, Any], names: list[str], default=None):
@@ -357,15 +542,40 @@ class MoomooDataProvider(DataProvider):
             scores.append(1.0 if self._last_close(history) > self._moving_average(history, 20) else 0.0)
         return sum(scores) / len(scores) if scores else 0.5
 
-    def _vix_level_and_previous(self, vix_symbol: str, as_of: date) -> tuple[float, float]:
+    def _volatility_signal(self, vix_symbol: str, proxy_symbol: str, as_of: date) -> dict[str, Any]:
         try:
             vix_history = self._history(vix_symbol, as_of, days=30)
         except MoomooProviderError:
-            return 0.0, 0.0
+            return self._volatility_proxy_signal(proxy_symbol, as_of)
         vix_closes = self._close_series(vix_history)
         vix = vix_closes[-1]
         previous_vix = vix_closes[-2] if len(vix_closes) >= 2 else vix
-        return vix, previous_vix
+        return {
+            "vix": vix,
+            "rising": vix > previous_vix,
+            "source": vix_symbol,
+            "risk_off": False,
+        }
+
+    def _volatility_proxy_signal(self, proxy_symbol: str, as_of: date) -> dict[str, Any]:
+        try:
+            proxy_history = self._history(proxy_symbol, as_of, days=40)
+        except MoomooProviderError:
+            return {
+                "vix": 0.0,
+                "rising": False,
+                "source": "unavailable",
+                "risk_off": False,
+            }
+        closes = self._close_series(proxy_history)
+        rising = closes[-1] > closes[-2] if len(closes) >= 2 else False
+        above_20dma = closes[-1] > self._moving_average(proxy_history, 20)
+        return {
+            "vix": 0.0,
+            "rising": rising,
+            "source": proxy_symbol,
+            "risk_off": rising and above_20dma,
+        }
 
     @classmethod
     def _near_support(cls, history) -> bool:
@@ -428,8 +638,8 @@ class MoomooDataProvider(DataProvider):
 
     @classmethod
     def _spread_from_legs(cls, ticker: str, expiration: date, long_leg: dict[str, Any], short_leg: dict[str, Any]) -> OptionSpread:
-        long_ask = cls._row_number(long_leg, ["ask_price", "ask", "last_price"], default=0.0)
-        short_bid = cls._row_number(short_leg, ["bid_price", "bid", "last_price"], default=0.0)
+        long_ask = cls._row_number(long_leg, ["ask_price", "ask", "mid_price", "mark_price", "price"], default=0.0)
+        short_bid = cls._row_number(short_leg, ["bid_price", "bid", "mid_price", "mark_price", "price"], default=0.0)
         debit = max(long_ask - short_bid, 0.0)
         long_mid = cls._mid_price(long_leg)
         short_mid = cls._mid_price(short_leg)
@@ -439,13 +649,13 @@ class MoomooDataProvider(DataProvider):
         return OptionSpread(
             ticker=ticker,
             expiration=expiration,
-            long_call=cls._row_number(long_leg, ["strike_price", "strike"]),
-            short_call=cls._row_number(short_leg, ["strike_price", "strike"]),
+            long_call=cls._row_number(long_leg, ["strike_price", "option_strike_price", "strike"]),
+            short_call=cls._row_number(short_leg, ["strike_price", "option_strike_price", "strike"]),
             debit=round(debit, 2),
-            long_delta=abs(cls._row_number(long_leg, ["delta"], default=0.0)),
-            short_delta=abs(cls._row_number(short_leg, ["delta"], default=0.0)),
-            long_open_interest=int(cls._row_number(long_leg, ["open_interest", "oi"], default=0)),
-            short_open_interest=int(cls._row_number(short_leg, ["open_interest", "oi"], default=0)),
+            long_delta=abs(cls._row_number(long_leg, ["delta", "option_delta"], default=0.0)),
+            short_delta=abs(cls._row_number(short_leg, ["delta", "option_delta"], default=0.0)),
+            long_open_interest=int(cls._row_number(long_leg, ["open_interest", "option_open_interest", "oi"], default=0)),
+            short_open_interest=int(cls._row_number(short_leg, ["open_interest", "option_open_interest", "oi"], default=0)),
             bid_ask_width_pct=cls._bid_ask_width_pct(long_leg, short_leg),
             volume_score=min(
                 (
@@ -456,8 +666,8 @@ class MoomooDataProvider(DataProvider):
                 1.0,
             ),
             iv_rank=max(
-                cls._row_number(long_leg, ["implied_volatility", "iv"], default=0.0),
-                cls._row_number(short_leg, ["implied_volatility", "iv"], default=0.0),
+                cls._iv_decimal(cls._row_number(long_leg, ["implied_volatility", "option_implied_volatility", "iv"], default=0.0)),
+                cls._iv_decimal(cls._row_number(short_leg, ["implied_volatility", "option_implied_volatility", "iv"], default=0.0)),
             ),
             expected_move_pct=0.0,
         )
@@ -468,7 +678,11 @@ class MoomooDataProvider(DataProvider):
         ask = cls._row_number(row, ["ask_price", "ask"], default=0.0)
         if bid > 0 and ask > 0:
             return (bid + ask) / 2
-        return cls._row_number(row, ["last_price"], default=0.0)
+        return cls._row_number(row, ["mid_price", "mark_price", "price", "last_price"], default=0.0)
+
+    @staticmethod
+    def _iv_decimal(value: float) -> float:
+        return value / 100 if value > 1 else value
 
     @classmethod
     def _bid_ask_width_pct(cls, long_leg: dict[str, Any], short_leg: dict[str, Any]) -> float:
@@ -479,4 +693,4 @@ class MoomooDataProvider(DataProvider):
             mid = (bid + ask) / 2
             if mid > 0:
                 widths.append((ask - bid) / mid)
-        return round(max(widths), 4) if widths else 1.0
+        return round(max(widths), 4) if widths else 0.25

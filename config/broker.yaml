@@ -13,3 +13,4 @@ providers:
       spy: SPY
       nasdaq_proxy: QQQ
       vix: US..VIX
+      volatility_proxy: VIXY

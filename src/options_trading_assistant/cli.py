@@ -6,13 +6,32 @@ import sys
 
 from options_trading_assistant.config import load_config
 from options_trading_assistant.engines.scanner import DailyScanner
-from options_trading_assistant.models import RecommendationAction, ScanResult, TradeCandidate
+from options_trading_assistant.engines.scoring import score_options, score_sector
+from options_trading_assistant.models import OptionSpread, RecommendationAction, ScanResult, SectorSnapshot, TradeCandidate
 from options_trading_assistant.providers.factory import build_provider
 from options_trading_assistant.reports.journal import append_scan_result
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the options trading assistant scanner.")
+    subparsers = parser.add_subparsers(dest="command")
+
+    diagnose = subparsers.add_parser("diagnose", help="Inspect provider response shapes for one ticker.")
+    diagnose.add_argument("--provider", default="moomoo", help="Data provider to diagnose.")
+    diagnose.add_argument("--ticker", default="MSFT", help="Ticker to inspect.")
+    diagnose.add_argument("--date", dest="as_of", default=None, help="Diagnostic date in YYYY-MM-DD format.")
+
+    scan_options = subparsers.add_parser("scan-options", help="Inspect bull call spread candidates for one ticker.")
+    scan_options.add_argument("--provider", default="moomoo", help="Data provider to use.")
+    scan_options.add_argument("--ticker", default="MSFT", help="Ticker to scan.")
+    scan_options.add_argument("--date", dest="as_of", default=None, help="Scan date in YYYY-MM-DD format.")
+    scan_options.add_argument("--limit", type=int, default=10, help="Maximum number of spreads to show.")
+
+    rank_sectors = subparsers.add_parser("rank-sectors", help="Rank configured sectors with live provider data.")
+    rank_sectors.add_argument("--provider", default="moomoo", help="Data provider to use.")
+    rank_sectors.add_argument("--date", dest="as_of", default=None, help="Ranking date in YYYY-MM-DD format.")
+    rank_sectors.add_argument("--limit", type=int, default=13, help="Maximum number of sectors to show.")
+
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
     parser.add_argument("--date", dest="as_of", default=None, help="Scan date in YYYY-MM-DD format.")
@@ -75,8 +94,179 @@ def format_result(result: ScanResult) -> str:
     return "\n".join(header + sections)
 
 
-def main() -> None:
-    args = parse_args()
+def format_option_spread(spread: OptionSpread, options_score: float) -> str:
+    return "\n".join(
+        [
+            f"Expiration: {spread.expiration.isoformat()}",
+            f"Spread: {spread.long_call:g}/{spread.short_call:g} bull call spread",
+            f"Options Score: {options_score:.2f}/15",
+            f"Debit: ${spread.debit:.2f}",
+            f"Max Profit: ${spread.max_profit:.0f}",
+            f"Max Loss: ${spread.max_loss:.0f}",
+            f"Reward/Risk: {spread.reward_to_risk:.2f}",
+            f"Breakeven: ${spread.breakeven:.2f}",
+            f"Long Delta: {spread.long_delta:.3f}",
+            f"Short Delta: {spread.short_delta:.3f}",
+            f"Open Interest: {spread.long_open_interest}/{spread.short_open_interest}",
+            f"Bid/Ask Width: {spread.bid_ask_width_pct:.2%}",
+            f"Volume Score: {spread.volume_score:.2f}",
+            f"IV: {spread.iv_rank:.2%}",
+        ]
+    )
+
+
+def format_option_scan(ticker: str, as_of: date, scored_spreads: list[tuple[OptionSpread, float]]) -> str:
+    lines = [
+        f"Ticker: {ticker}",
+        f"Date: {as_of.isoformat()}",
+        f"Spread Candidates: {len(scored_spreads)}",
+    ]
+    if not scored_spreads:
+        lines.append("No spread candidates matched the configured expiration/width filters.")
+        return "\n".join(lines)
+
+    for index, (spread, options_score_value) in enumerate(scored_spreads, start=1):
+        lines.append("")
+        lines.append(f"[{index}]")
+        lines.append(format_option_spread(spread, options_score_value))
+    return "\n".join(lines)
+
+
+def format_sector_ranking(as_of: date, ranked_sectors: list[tuple[SectorSnapshot, float]]) -> str:
+    lines = [
+        f"Date: {as_of.isoformat()}",
+        f"Sectors Ranked: {len(ranked_sectors)}",
+        "",
+        "Rank | Sector | ETF | Score | RS 1D | RS 5D | RS 20D | >20DMA | >50DMA | Volume | Momentum | Recovery",
+        "---: | --- | --- | ---: | ---: | ---: | ---: | :---: | :---: | ---: | ---: | ---:",
+    ]
+    for index, (sector, sector_score_value) in enumerate(ranked_sectors, start=1):
+        lines.append(
+            " | ".join(
+                [
+                    str(index),
+                    sector.name,
+                    sector.primary_etf,
+                    f"{sector_score_value:.2f}/15",
+                    f"{sector.relative_strength_1d:.2f}",
+                    f"{sector.relative_strength_5d:.2f}",
+                    f"{sector.relative_strength_20d:.2f}",
+                    "Y" if sector.above_20dma else "N",
+                    "Y" if sector.above_50dma else "N",
+                    f"{sector.volume_trend_score:.2f}",
+                    f"{sector.momentum_score:.2f}",
+                    f"{sector.recovery_score:.2f}",
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def format_diagnostics(report: dict) -> str:
+    lines = [
+        f"Provider: {report['provider']}",
+        f"OpenD: {report['host']}:{report['port']}",
+        f"Ticker: {report['ticker']}",
+        f"Code: {report['code']}",
+        f"Date: {report['as_of']}",
+    ]
+
+    for section_name, section in report["sections"].items():
+        lines.append("")
+        lines.append(f"[{section_name}]")
+        if not section.get("ok"):
+            lines.append(f"Status: ERROR")
+            lines.append(f"Error: {section.get('error', 'Unknown error')}")
+            continue
+
+        lines.append("Status: OK")
+        if "rows" in section:
+            lines.append(f"Rows: {section['rows']}")
+        if "call_rows" in section:
+            lines.append(f"Call Rows: {section['call_rows']}")
+        if "expiration" in section:
+            lines.append(f"Expiration: {section['expiration']}")
+        if "selected_expiration" in section:
+            lines.append(f"Selected Expiration: {section['selected_expiration'] or 'None'}")
+        if "eligible_expirations" in section:
+            eligible = ", ".join(section["eligible_expirations"]) or "None"
+            lines.append(f"Eligible Expirations: {eligible}")
+
+        columns = section.get("columns", [])
+        lines.append(f"Columns ({len(columns)}): {', '.join(columns) if columns else 'None'}")
+
+        required_fields = section.get("required_fields", {})
+        if required_fields:
+            lines.append("Required Field Coverage:")
+            for field, coverage in required_fields.items():
+                status = "OK" if coverage["ok"] else "MISSING"
+                matched = ", ".join(coverage["matched"]) if coverage["matched"] else "none"
+                lines.append(f"- {field}: {status} ({matched})")
+
+        sample = section.get("sample", {})
+        if sample:
+            preview_items = list(sample.items())[:8]
+            preview = "; ".join(f"{key}={value}" for key, value in preview_items)
+            lines.append(f"Sample: {preview}")
+
+    return "\n".join(lines)
+
+
+def run_diagnostics(args: argparse.Namespace) -> None:
+    config = load_config()
+    provider = build_provider(args.provider, config)
+    try:
+        diagnose = getattr(provider, "diagnose_ticker", None)
+        if diagnose is None:
+            raise RuntimeError(f"Provider '{args.provider}' does not support diagnostics.")
+        report = diagnose(args.ticker, parse_scan_date(args.as_of))
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    print(format_diagnostics(report))
+
+
+def run_option_scan(args: argparse.Namespace) -> None:
+    config = load_config()
+    as_of = parse_scan_date(args.as_of)
+    provider = build_provider(args.provider, config)
+    try:
+        spreads = provider.get_option_spreads(args.ticker, as_of)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    scored = [
+        (spread, score_options(spread, config.strategy["trade"], as_of))
+        for spread in spreads
+    ]
+    ranked = sorted(scored, key=lambda item: item[1], reverse=True)[: args.limit]
+    print(format_option_scan(args.ticker, as_of, ranked))
+
+
+def run_sector_ranking(args: argparse.Namespace) -> None:
+    config = load_config()
+    as_of = parse_scan_date(args.as_of)
+    provider = build_provider(args.provider, config)
+    try:
+        sectors = provider.get_sector_snapshots(as_of)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    ranked = sorted(
+        [(sector, score_sector(sector)) for sector in sectors],
+        key=lambda item: item[1],
+        reverse=True,
+    )[: args.limit]
+    print(format_sector_ranking(as_of, ranked))
+
+
+def run_scan(args: argparse.Namespace) -> None:
     config = load_config()
     selected_mode = args.mode or config.strategy["default_mode"]
     selected_provider = args.provider or config.broker["active_provider"]
@@ -84,21 +274,33 @@ def main() -> None:
 
     provider = build_provider(selected_provider, config)
     try:
-        try:
-            scanner = DailyScanner(config=config, provider=provider)
-            result = scanner.run(mode=selected_mode, as_of=as_of)
-        finally:
-            close = getattr(provider, "close", None)
-            if close:
-                close()
-    except RuntimeError as exc:
-        print(f"Provider error: {exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
+        scanner = DailyScanner(config=config, provider=provider)
+        result = scanner.run(mode=selected_mode, as_of=as_of)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
 
     print(format_result(result))
     if not args.no_log:
         path = append_scan_result(result)
         print(f"\nLogged scan result to: {path}")
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        if args.command == "diagnose":
+            run_diagnostics(args)
+        elif args.command == "scan-options":
+            run_option_scan(args)
+        elif args.command == "rank-sectors":
+            run_sector_ranking(args)
+        else:
+            run_scan(args)
+    except RuntimeError as exc:
+        print(f"Provider error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ class MarketSnapshot:
     distribution_days: int
     breadth_score: float
     growth_participation_score: float
+    volatility_source: str = "VIX"
+    volatility_risk_off: bool = False
 
 
 @dataclass(frozen=True)

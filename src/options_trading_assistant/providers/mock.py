@@ -113,7 +113,7 @@ class MockDataProvider(DataProvider):
         expiration = as_of + timedelta(days=28)
         spreads = {
             "ISRG": (
-                OptionSpread(ticker, expiration, 430, 435, 2.05, 0.48, 0.35, 1820, 1510, 0.07, 0.82, 0.44, 4.8),
+                OptionSpread(ticker, expiration, 430, 435, 1.95, 0.48, 0.35, 1820, 1510, 0.07, 0.82, 0.44, 4.8),
                 OptionSpread(ticker, expiration, 435, 440, 2.35, 0.40, 0.28, 390, 220, 0.16, 0.44, 0.70, 5.2),
             ),
             "MSFT": (

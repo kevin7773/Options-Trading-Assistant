@@ -22,6 +22,24 @@ To use Moomoo OpenD for live market data, make sure OpenD is running locally and
 python -m options_trading_assistant.cli --provider moomoo --mode balanced
 ```
 
+Inspect Moomoo response shapes for a ticker:
+
+```powershell
+python -m options_trading_assistant.cli diagnose --provider moomoo --ticker MSFT
+```
+
+Inspect bull call spread candidates for a ticker without running the full scanner:
+
+```powershell
+python -m options_trading_assistant.cli scan-options --provider moomoo --ticker MSFT
+```
+
+Rank configured sectors with provider data:
+
+```powershell
+python -m options_trading_assistant.cli rank-sectors --provider moomoo
+```
+
 ## Test
 
 ```powershell

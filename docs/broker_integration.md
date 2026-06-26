@@ -20,4 +20,28 @@ Run with:
 python -m options_trading_assistant.cli --provider moomoo --mode balanced
 ```
 
+Inspect live provider fields with:
+
+```powershell
+python -m options_trading_assistant.cli diagnose --provider moomoo --ticker MSFT
+```
+
+Inspect option spread candidates directly with:
+
+```powershell
+python -m options_trading_assistant.cli scan-options --provider moomoo --ticker MSFT
+```
+
+Rank configured sectors with:
+
+```powershell
+python -m options_trading_assistant.cli rank-sectors --provider moomoo
+```
+
 Paper trading and live order placement remain intentionally separate from the market-data provider.
+
+## Volatility Data
+
+Moomoo OpenD may recognize `US..VIX` but still reject US index data through quote/history calls because VIX dissemination is restricted.
+
+The provider therefore attempts true VIX first, then falls back to `VIXY` as a volatility-risk proxy. The proxy is used for direction and risk-off detection, not as a substitute for the VIX index level.

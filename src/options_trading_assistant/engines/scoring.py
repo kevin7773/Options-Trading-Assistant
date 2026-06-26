@@ -20,7 +20,10 @@ def score_market(snapshot: MarketSnapshot, market_config: dict) -> float:
     score = 0.0
     score += 7.0 if snapshot.spy_above_20dma else 0.0
     score += 7.0 if snapshot.nasdaq_above_20dma else 0.0
-    score += 5.0 if not (snapshot.vix > market_config["max_vix_if_rising"] and snapshot.vix_rising) else 0.0
+    volatility_is_hostile = snapshot.volatility_risk_off or (
+        snapshot.vix > market_config["max_vix_if_rising"] and snapshot.vix_rising
+    )
+    score += 5.0 if not volatility_is_hostile else 0.0
     score += 4.0 if snapshot.distribution_days < market_config["max_distribution_days"] else 0.0
     score += 4.0 * clamp(snapshot.breadth_score)
     score += 3.0 * clamp(snapshot.growth_participation_score)
@@ -86,6 +89,15 @@ def score_confirmation(stock: StockSnapshot, required_signals: int) -> float:
 
 def score_options(spread: OptionSpread, trade_config: dict, as_of: date) -> float:
     dte = (spread.expiration - as_of).days
+    if spread.debit <= 0 or spread.debit >= spread.width:
+        return 0.0
+
+    if spread.max_loss > trade_config["max_debit_per_spread"]:
+        return 0.0
+
+    if spread.reward_to_risk < trade_config["min_reward_to_risk"]:
+        return 0.0
+
     score = 0.0
     score += 2.0 if trade_config["min_days_to_expiration"] <= dte <= trade_config["max_days_to_expiration"] else 0.0
     score += 2.0 if spread.width in trade_config["preferred_spread_widths"] else 0.0

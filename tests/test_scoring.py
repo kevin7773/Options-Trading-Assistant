@@ -1,8 +1,8 @@
 from datetime import date
 
 from options_trading_assistant.config import load_config
-from options_trading_assistant.engines.scoring import market_block_reason, score_market
-from options_trading_assistant.models import MarketSnapshot
+from options_trading_assistant.engines.scoring import market_block_reason, score_market, score_options
+from options_trading_assistant.models import MarketSnapshot, OptionSpread
 
 
 def test_market_block_reason_when_spy_below_20dma():
@@ -35,3 +35,45 @@ def test_score_market_caps_at_30_points():
     )
 
     assert score_market(snapshot, config.strategy["market"]) == 30
+
+
+def test_score_options_zeroes_spread_with_poor_reward_to_risk():
+    config = load_config()
+    spread = OptionSpread(
+        ticker="MSFT",
+        expiration=date(2026, 7, 24),
+        long_call=380,
+        short_call=385,
+        debit=3.85,
+        long_delta=0.456,
+        short_delta=0.404,
+        long_open_interest=801,
+        short_open_interest=786,
+        bid_ask_width_pct=0.1881,
+        volume_score=0.83,
+        iv_rank=0.3574,
+        expected_move_pct=0,
+    )
+
+    assert score_options(spread, config.strategy["trade"], date(2026, 6, 26)) == 0
+
+
+def test_score_options_accepts_valid_priced_spread():
+    config = load_config()
+    spread = OptionSpread(
+        ticker="MSFT",
+        expiration=date(2026, 7, 24),
+        long_call=385,
+        short_call=390,
+        debit=1.85,
+        long_delta=0.42,
+        short_delta=0.31,
+        long_open_interest=900,
+        short_open_interest=1200,
+        bid_ask_width_pct=0.05,
+        volume_score=0.8,
+        iv_rank=0.35,
+        expected_move_pct=0,
+    )
+
+    assert score_options(spread, config.strategy["trade"], date(2026, 6, 26)) > 0
