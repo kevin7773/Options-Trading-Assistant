@@ -8,5 +8,7 @@ env/
 
 data/journal/*.jsonl
 data/journal/decision_packets/
+data/reports/daily/*.md
+data/reports/daily/*.html
 data/backtests/results/
 excel/outputs/

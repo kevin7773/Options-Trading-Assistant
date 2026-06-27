@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date, datetime
+from pathlib import Path
 import sys
 
 from options_trading_assistant.config import load_config
@@ -24,12 +25,26 @@ from options_trading_assistant.models import (
 )
 from options_trading_assistant.providers.factory import build_provider
 from options_trading_assistant.reports.decision_packets import write_decision_packets
+from options_trading_assistant.reports.daily_report import (
+    format_daily_report_html,
+    format_report_footer,
+    write_daily_report,
+    write_daily_report_html,
+)
 from options_trading_assistant.reports.journal import append_scan_result
 from options_trading_assistant.reports.journal_review import (
     filter_scan_records,
     format_journal_review,
     load_scan_records,
     summarize_scan_records,
+)
+from options_trading_assistant.reports.packet_review import (
+    find_packet_files,
+    format_packet_list,
+    format_packet_review,
+    packet_summary,
+    summarize_packets,
+    update_packet_outcome,
 )
 
 
@@ -65,6 +80,27 @@ def parse_args() -> argparse.Namespace:
     review_journal.add_argument("--ticker", default=None, help="Only include scans mentioning this ticker.")
     review_journal.add_argument("--stage", default=None, help="Only include scans with this rejection stage.")
     review_journal.add_argument("--limit", type=int, default=10, help="Maximum rows per summary section.")
+
+    list_packets = subparsers.add_parser("list-packets", help="List decision packet files and outcome status.")
+    list_packets.add_argument("--date", dest="scan_date", default=None, help="Only include packets for YYYY-MM-DD.")
+    list_packets.add_argument("--limit", type=int, default=None, help="Maximum packets to show.")
+
+    update_outcome = subparsers.add_parser("update-outcome", help="Update a decision packet outcome block.")
+    update_outcome.add_argument("--packet", required=True, help="Path to a decision packet JSON file.")
+    update_outcome.add_argument("--status", default=None, help="Outcome status, such as reviewed or closed.")
+    update_outcome.add_argument("--notes", default=None, help="Outcome notes.")
+    update_outcome.add_argument("--closed-at", default=None, help="Closed timestamp/date.")
+    update_outcome.add_argument("--final-pl", type=float, default=None, help="Final realized or simulated P/L.")
+
+    review_packets = subparsers.add_parser("review-packets", help="Summarize decision packet outcomes.")
+    review_packets.add_argument("--date", dest="scan_date", default=None, help="Only include packets for YYYY-MM-DD.")
+    review_packets.add_argument("--limit", type=int, default=10, help="Maximum rows per summary section.")
+
+    daily_report = subparsers.add_parser("daily-report", help="Run the daily scanner and save a Markdown report.")
+    daily_report.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
+    daily_report.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
+    daily_report.add_argument("--date", dest="as_of", default=None, help="Report date in YYYY-MM-DD format.")
+    daily_report.add_argument("--no-log", action="store_true", help="Do not append JSONL or decision packets.")
 
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
@@ -460,6 +496,70 @@ def run_journal_review(args: argparse.Namespace) -> None:
     print(format_journal_review(summary, limit=args.limit))
 
 
+def run_list_packets(args: argparse.Namespace) -> None:
+    paths = find_packet_files(scan_date=args.scan_date)
+    summaries = [packet_summary(path) for path in paths]
+    print(format_packet_list(summaries, limit=args.limit))
+
+
+def run_update_outcome(args: argparse.Namespace) -> None:
+    packet_path = Path(args.packet)
+    packet = update_packet_outcome(
+        packet_path,
+        status=args.status,
+        notes=args.notes,
+        closed_at=args.closed_at,
+        final_pl=args.final_pl,
+    )
+    outcome = packet.get("outcome", {})
+    print(f"Updated outcome for: {packet_path}")
+    print(f"Status: {outcome.get('status')}")
+    print(f"Closed At: {outcome.get('closed_at')}")
+    print(f"Final P/L: {outcome.get('final_pl')}")
+    print(f"Notes: {outcome.get('notes')}")
+
+
+def run_packet_review(args: argparse.Namespace) -> None:
+    paths = find_packet_files(scan_date=args.scan_date)
+    summary = summarize_packets(paths)
+    print(format_packet_review(summary, limit=args.limit))
+
+
+def run_daily_report(args: argparse.Namespace) -> None:
+    config = load_config()
+    selected_mode = args.mode or config.strategy["default_mode"]
+    selected_provider = args.provider or config.broker["active_provider"]
+    as_of = parse_scan_date(args.as_of)
+
+    provider = build_provider(selected_provider, config)
+    try:
+        scanner = DailyScanner(config=config, provider=provider)
+        result = scanner.run(mode=selected_mode, as_of=as_of)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    packet_paths = []
+    if not args.no_log:
+        append_scan_result(result)
+        packet_paths = write_decision_packets(result)
+
+    report_content = "\n".join(
+        [
+            "# Daily Trading Report",
+            "",
+            format_result(result),
+            format_report_footer(result, len(packet_paths)),
+        ]
+    )
+    report_path = write_daily_report(as_of, report_content)
+    html_path = write_daily_report_html(as_of, format_daily_report_html(result, len(packet_paths)))
+    print(report_content)
+    print(f"\nSaved daily report to: {report_path}")
+    print(f"Saved HTML email report to: {html_path}")
+
+
 def run_scan(args: argparse.Namespace) -> None:
     config = load_config()
     selected_mode = args.mode or config.strategy["default_mode"]
@@ -496,6 +596,14 @@ def main() -> None:
             run_stock_scan(args)
         elif args.command == "review-journal":
             run_journal_review(args)
+        elif args.command == "list-packets":
+            run_list_packets(args)
+        elif args.command == "update-outcome":
+            run_update_outcome(args)
+        elif args.command == "review-packets":
+            run_packet_review(args)
+        elif args.command == "daily-report":
+            run_daily_report(args)
         else:
             run_scan(args)
     except RuntimeError as exc:

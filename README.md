@@ -56,6 +56,23 @@ python -m options_trading_assistant.cli review-journal --days 30
 
 Logged scans also write per-decision JSON packets under `data/journal/decision_packets/`.
 
+List and update decision packet outcomes:
+
+```powershell
+python -m options_trading_assistant.cli list-packets --date 2026-06-26
+python -m options_trading_assistant.cli update-outcome --packet <path> --status reviewed --notes "No entry; market faded."
+python -m options_trading_assistant.cli review-packets --date 2026-06-26
+```
+
+Generate the morning report:
+
+```powershell
+python -m options_trading_assistant.cli daily-report --provider moomoo --mode balanced
+```
+
+Daily reports are saved under `data/reports/daily/`.
+The command writes both Markdown and HTML versions; the scheduled Gmail draft uses the HTML version for a cleaner email body.
+
 ## Test
 
 ```powershell
