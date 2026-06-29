@@ -83,6 +83,13 @@ class OptionSpread:
     volume_score: float
     iv_rank: float
     expected_move_pct: float
+    estimated_debit: float | None = None
+    debit_pct_of_width: float | None = None
+    expected_move: float | None = None
+    distance_to_long_strike: float | None = None
+    distance_to_short_strike: float | None = None
+    estimated_reward_risk: float | None = None
+    pricing_reason: str | None = None
 
     @property
     def width(self) -> float:

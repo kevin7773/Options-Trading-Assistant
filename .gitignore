@@ -10,5 +10,8 @@ data/journal/*.jsonl
 data/journal/decision_packets/
 data/reports/daily/*.md
 data/reports/daily/*.html
+data/dashboard/
+data/historical/
 data/backtests/results/
+backtesting/results/
 excel/outputs/

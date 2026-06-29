@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 from datetime import date, datetime
 from pathlib import Path
 import sys
 
+from options_trading_assistant.backtesting.diagnostics import (
+    build_stock_diagnostics_report,
+    format_stock_diagnostics_report,
+)
+from options_trading_assistant.backtesting.engine import run_backtest
+from options_trading_assistant.backtesting.scenarios import get_scenario, scenario_names
 from options_trading_assistant.config import load_config
 from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.engines.scoring import (
@@ -24,6 +31,7 @@ from options_trading_assistant.models import (
     TradeCandidate,
 )
 from options_trading_assistant.providers.factory import build_provider
+from options_trading_assistant.providers.historical import HistoricalDataProvider, hydrate_massive_ohlcv
 from options_trading_assistant.reports.decision_packets import write_decision_packets
 from options_trading_assistant.reports.daily_report import (
     format_daily_report_html,
@@ -31,6 +39,7 @@ from options_trading_assistant.reports.daily_report import (
     write_daily_report,
     write_daily_report_html,
 )
+from options_trading_assistant.reports.dashboard import build_dashboard, serve_dashboard
 from options_trading_assistant.reports.journal import append_scan_result
 from options_trading_assistant.reports.journal_review import (
     filter_scan_records,
@@ -101,6 +110,55 @@ def parse_args() -> argparse.Namespace:
     daily_report.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     daily_report.add_argument("--date", dest="as_of", default=None, help="Report date in YYYY-MM-DD format.")
     daily_report.add_argument("--no-log", action="store_true", help="Do not append JSONL or decision packets.")
+
+    dashboard = subparsers.add_parser("dashboard", help="Build a local HTML dashboard for reports and decision packets.")
+    dashboard.add_argument("--serve", action="store_true", help="Serve the dashboard at a local URL after building it.")
+    dashboard.add_argument("--host", default="127.0.0.1", help="Host for --serve.")
+    dashboard.add_argument("--port", type=int, default=8765, help="Port for --serve.")
+
+    backtest = subparsers.add_parser("backtest", help="Run the scanner across historical OHLCV data.")
+    backtest.add_argument("--start", required=True, help="Backtest start date in YYYY-MM-DD format.")
+    backtest.add_argument("--end", required=True, help="Backtest end date in YYYY-MM-DD format.")
+    backtest.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
+    backtest.add_argument("--data-source", choices=("cache", "massive"), default="cache", help="Historical data source.")
+    backtest.add_argument("--cache-dir", default=None, help="Historical data cache directory.")
+    backtest.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
+    backtest.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
+    backtest.add_argument("--run-id", default=None, help="Optional stable output folder name.")
+    backtest.add_argument("--scenario", default="balanced", help="Backtest scenario: balanced, high_probability, aggressive.")
+
+    scenarios = subparsers.add_parser("backtest-scenarios", help="Run multiple entry/exit scenarios over the same period.")
+    scenarios.add_argument("--start", required=True, help="Backtest start date in YYYY-MM-DD format.")
+    scenarios.add_argument("--end", required=True, help="Backtest end date in YYYY-MM-DD format.")
+    scenarios.add_argument("--mode", default=None, help="Scanner mode, usually balanced for scenario comparison.")
+    scenarios.add_argument("--data-source", choices=("cache", "massive"), default="cache", help="Historical data source.")
+    scenarios.add_argument("--cache-dir", default=None, help="Historical data cache directory.")
+    scenarios.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
+    scenarios.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
+    scenarios.add_argument("--scenarios", default="all", help="Comma-separated scenarios or 'all'.")
+
+    hydrate = subparsers.add_parser("hydrate-history", help="Download historical OHLCV bars into the local cache.")
+    hydrate.add_argument("--start", required=True, help="Hydration start date in YYYY-MM-DD format.")
+    hydrate.add_argument("--end", required=True, help="Hydration end date in YYYY-MM-DD format.")
+    hydrate.add_argument("--cache-dir", default=None, help="Historical data cache directory.")
+    hydrate.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
+    hydrate.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
+    hydrate.add_argument("--limit", type=int, default=None, help="Only process the first N uncached/cached symbols.")
+    hydrate.add_argument("--tickers", default=None, help="Comma-separated ticker override for testing or partial hydrates.")
+
+    stock_diagnostics = subparsers.add_parser(
+        "backtest-stock-diagnostics",
+        help="Rank and explain historical stock-layer rejections for one date.",
+    )
+    stock_diagnostics.add_argument("--date", dest="as_of", required=True, help="Historical date in YYYY-MM-DD format.")
+    stock_diagnostics.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
+    stock_diagnostics.add_argument("--cache-dir", default=None, help="Historical data cache directory.")
+    stock_diagnostics.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
+    stock_diagnostics.add_argument("--limit", type=int, default=25, help="Number of ranked stocks to show.")
+
+    lifecycle = subparsers.add_parser("review-trades", help="Print trade lifecycle diagnostics for a backtest run.")
+    lifecycle.add_argument("--run-dir", required=True, help="Backtest result directory containing trades.jsonl.")
+    lifecycle.add_argument("--limit", type=int, default=None, help="Maximum trades to show.")
 
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
@@ -197,24 +255,35 @@ def format_rejection_summary(rejections: tuple[RejectedCandidate, ...], limit: i
 
 
 def format_option_spread(spread: OptionSpread, options_score: float) -> str:
-    return "\n".join(
-        [
-            f"Expiration: {spread.expiration.isoformat()}",
-            f"Spread: {spread.long_call:g}/{spread.short_call:g} bull call spread",
-            f"Options Score: {options_score:.2f}/15",
-            f"Debit: ${spread.debit:.2f}",
-            f"Max Profit: ${spread.max_profit:.0f}",
-            f"Max Loss: ${spread.max_loss:.0f}",
-            f"Reward/Risk: {spread.reward_to_risk:.2f}",
-            f"Breakeven: ${spread.breakeven:.2f}",
-            f"Long Delta: {spread.long_delta:.3f}",
-            f"Short Delta: {spread.short_delta:.3f}",
-            f"Open Interest: {spread.long_open_interest}/{spread.short_open_interest}",
-            f"Bid/Ask Width: {spread.bid_ask_width_pct:.2%}",
-            f"Volume Score: {spread.volume_score:.2f}",
-            f"IV: {spread.iv_rank:.2%}",
-        ]
-    )
+    lines = [
+        f"Expiration: {spread.expiration.isoformat()}",
+        f"Spread: {spread.long_call:g}/{spread.short_call:g} bull call spread",
+        f"Options Score: {options_score:.2f}/15",
+        f"Debit: ${spread.debit:.2f}",
+        f"Max Profit: ${spread.max_profit:.0f}",
+        f"Max Loss: ${spread.max_loss:.0f}",
+        f"Reward/Risk: {spread.reward_to_risk:.2f}",
+        f"Breakeven: ${spread.breakeven:.2f}",
+        f"Long Delta: {spread.long_delta:.3f}",
+        f"Short Delta: {spread.short_delta:.3f}",
+        f"Open Interest: {spread.long_open_interest}/{spread.short_open_interest}",
+        f"Bid/Ask Width: {spread.bid_ask_width_pct:.2%}",
+        f"Volume Score: {spread.volume_score:.2f}",
+        f"IV: {spread.iv_rank:.2%}",
+    ]
+    if spread.estimated_debit is not None:
+        lines.extend(
+            [
+                f"Estimated Debit: ${spread.estimated_debit:.2f}",
+                f"Debit % Width: {spread.debit_pct_of_width:.2%}",
+                f"Expected Move: ${spread.expected_move:.2f}",
+                f"Distance to Long Strike: {spread.distance_to_long_strike:.2f}%",
+                f"Distance to Short Strike: {spread.distance_to_short_strike:.2f}%",
+                f"Estimated Reward/Risk: {spread.estimated_reward_risk:.2f}",
+                f"Pricing Reason: {spread.pricing_reason}",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def format_option_scan(ticker: str, as_of: date, scored_spreads: list[tuple[OptionSpread, float]]) -> str:
@@ -560,6 +629,252 @@ def run_daily_report(args: argparse.Namespace) -> None:
     print(f"Saved HTML email report to: {html_path}")
 
 
+def run_dashboard(args: argparse.Namespace) -> None:
+    path = build_dashboard()
+    print(f"Built dashboard: {path}")
+    if args.serve:
+        serve_dashboard(path, host=args.host, port=args.port)
+
+
+def run_historical_backtest(args: argparse.Namespace) -> None:
+    config = load_config()
+    mode = args.mode or config.strategy["default_mode"]
+    start = parse_scan_date(args.start)
+    end = parse_scan_date(args.end)
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    scenario = get_scenario(args.scenario)
+    if args.data_source == "massive":
+        provider = HistoricalDataProvider.from_massive(
+            config=config,
+            start=start,
+            end=end,
+            cache_dir=cache_dir,
+            calls_per_minute=args.calls_per_minute,
+            vix_proxy=args.vix_proxy,
+            scenario=scenario,
+        )
+    else:
+        provider = HistoricalDataProvider.from_cache(
+            config=config,
+            cache_dir=cache_dir,
+            vix_proxy=args.vix_proxy,
+            scenario=scenario,
+        )
+
+    result = run_backtest(
+        config=config,
+        provider=provider,
+        mode=mode,
+        start=start,
+        end=end,
+        run_id=args.run_id,
+        scenario=scenario,
+    )
+    print(format_backtest_summary(result.summary))
+    print(f"Backtest artifacts: {result.output_dir}")
+
+
+def run_backtest_scenarios(args: argparse.Namespace) -> None:
+    config = load_config()
+    mode = args.mode or config.strategy["default_mode"]
+    start = parse_scan_date(args.start)
+    end = parse_scan_date(args.end)
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    results = []
+    for name in scenario_names(args.scenarios):
+        scenario = get_scenario(name)
+        if args.data_source == "massive":
+            provider = HistoricalDataProvider.from_massive(
+                config=config,
+                start=start,
+                end=end,
+                cache_dir=cache_dir,
+                calls_per_minute=args.calls_per_minute,
+                vix_proxy=args.vix_proxy,
+                scenario=scenario,
+            )
+        else:
+            provider = HistoricalDataProvider.from_cache(
+                config=config,
+                cache_dir=cache_dir,
+                vix_proxy=args.vix_proxy,
+                scenario=scenario,
+            )
+        result = run_backtest(
+            config=config,
+            provider=provider,
+            mode=mode,
+            start=start,
+            end=end,
+            scenario=scenario,
+        )
+        results.append(result)
+    print(format_scenario_comparison(results))
+
+
+def format_scenario_comparison(results) -> str:
+    lines = [
+        "Scenario Comparison",
+        "Scenario | Scans | Trades | Sit-outs | Win Rate | Avg Win | Avg Loss | Expectancy | Max DD | Artifacts",
+        "--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---",
+    ]
+    for result in results:
+        summary = result.summary
+        lines.append(
+            " | ".join(
+                [
+                    str(summary["scenario"]),
+                    str(summary["scan_count"]),
+                    str(summary["trade_count"]),
+                    str(summary["sit_out_count"]),
+                    f"{summary['win_rate']:.1%}",
+                    f"${summary['average_win']:.2f}",
+                    f"${summary['average_loss']:.2f}",
+                    f"${summary['expectancy']:.2f}",
+                    f"${summary['max_drawdown']:.2f}",
+                    result.output_dir,
+                ]
+            )
+        )
+    return "\n".join(lines)
+
+
+def run_hydrate_history(args: argparse.Namespace) -> None:
+    config = load_config()
+    start = parse_scan_date(args.start)
+    end = parse_scan_date(args.end)
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    tickers = [ticker.strip().upper() for ticker in args.tickers.split(",") if ticker.strip()] if args.tickers else None
+    summary = hydrate_massive_ohlcv(
+        config=config,
+        start=start,
+        end=end,
+        cache_dir=cache_dir,
+        calls_per_minute=args.calls_per_minute,
+        vix_proxy=args.vix_proxy,
+        tickers=tickers,
+        limit=args.limit,
+    )
+    print(format_hydrate_summary(summary))
+
+
+def run_backtest_stock_diagnostics(args: argparse.Namespace) -> None:
+    config = load_config()
+    mode = args.mode or config.strategy["default_mode"]
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    provider = HistoricalDataProvider.from_cache(config=config, cache_dir=cache_dir, vix_proxy=args.vix_proxy)
+    report = build_stock_diagnostics_report(
+        config=config,
+        provider=provider,
+        mode=mode,
+        as_of=parse_scan_date(args.as_of),
+        limit=args.limit,
+    )
+    print(format_stock_diagnostics_report(report))
+
+
+def run_review_trades(args: argparse.Namespace) -> None:
+    trades_path = Path(args.run_dir) / "trades.jsonl"
+    if not trades_path.exists():
+        raise RuntimeError(f"No trades.jsonl found at {trades_path}")
+    trades = [
+        json.loads(line)
+        for line in trades_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    print(format_trade_lifecycle_report(trades[: args.limit] if args.limit else trades))
+
+
+def format_trade_lifecycle_report(trades: list[dict]) -> str:
+    if not trades:
+        return "Trade Lifecycle Report\n- No trades recorded."
+    lines = [
+        "Trade Lifecycle Report",
+        f"Trades: {len(trades)}",
+        "",
+    ]
+    for trade in trades:
+        lines.extend(
+            [
+                f"{trade['ticker']} {trade['entry_date']} -> {trade['exit_date']} ({trade.get('scenario', 'unknown')})",
+                f"- Sector: {trade['sector']}",
+                f"- Entry stock price: ${trade['entry_underlying_price']:.2f}",
+                f"- Spread: {trade['long_call']:g}/{trade['short_call']:g}",
+                f"- Debit: ${trade['debit']:.2f}",
+                f"- Exit stock price: ${trade['exit_underlying_price']:.2f}",
+                f"- Exit spread value: ${trade['exit_spread_value']:.2f}",
+                f"- P/L: ${trade['final_pl']:.2f}",
+                f"- Max favorable excursion: ${trade['max_favorable_excursion']:.2f}",
+                f"- Max adverse excursion: ${trade['max_adverse_excursion']:.2f}",
+                f"- Highest stock price during hold: ${trade['highest_underlying_price']:.2f}",
+                f"- Lowest stock price during hold: ${trade['lowest_underlying_price']:.2f}",
+                f"- Profit target touched: {'YES' if trade['profit_target_touched'] else 'NO'}",
+                f"- Stop/invalidation before 14-day exit: {'YES' if trade['stop_triggered_before_exit'] else 'NO'}",
+                f"- Market score entry/exit: {trade['market_score_entry']:.2f} -> {trade['market_score_exit']:.2f}",
+                f"- Sector score entry/exit: {trade['sector_score_entry']:.2f} -> {trade['sector_score_exit']:.2f}",
+                f"- Confirmation signals at entry: {', '.join(trade['confirmation_signals_entry']) or 'none'}",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip()
+
+
+def format_hydrate_summary(summary: dict) -> str:
+    lines = [
+        "Historical Hydration Summary",
+        f"- Requested symbols: {summary['requested']}",
+        f"- Processed this run: {summary['processed']}",
+        f"- Remaining after limit: {summary['remaining']}",
+        f"- Already cached: {len(summary['cached'])}",
+        f"- Fetched: {len(summary['fetched'])}",
+        f"- Failed: {len(summary['failed'])}",
+        f"- Cache: {summary['cache_dir']}",
+    ]
+    if summary["fetched"]:
+        lines.append(f"- Fetched symbols: {', '.join(summary['fetched'])}")
+    if summary["failed"]:
+        lines.append("- Failures:")
+        for ticker, reason in summary["failed"].items():
+            lines.append(f"  - {ticker}: {reason}")
+    return "\n".join(lines)
+
+
+def format_backtest_summary(summary: dict) -> str:
+    lines = [
+        "Backtest Summary",
+        f"- Scans: {summary['scan_count']}",
+        f"- Trades: {summary['trade_count']}",
+        f"- Sit-outs: {summary['sit_out_count']}",
+        f"- Win rate: {summary['win_rate']:.1%}",
+        f"- Average win: ${summary['average_win']:.2f}",
+        f"- Average loss: ${summary['average_loss']:.2f}",
+        f"- Expectancy: ${summary['expectancy']:.2f}",
+        f"- Max drawdown: ${summary['max_drawdown']:.2f}",
+        "",
+        "Performance by sector:",
+    ]
+    lines.extend(_format_backtest_group(summary["performance_by_sector"]))
+    lines.append("")
+    lines.append("Performance by market regime:")
+    lines.extend(_format_backtest_group(summary["performance_by_market_regime"]))
+    lines.append("")
+    lines.append("Performance by score bucket:")
+    lines.extend(_format_backtest_group(summary["performance_by_score_bucket"]))
+    return "\n".join(lines)
+
+
+def _format_backtest_group(group: dict) -> list[str]:
+    if not group:
+        return ["- none"]
+    return [
+        (
+            f"- {name}: trades={metrics['trades']} win_rate={metrics['win_rate']:.1%} "
+            f"total_pl=${metrics['total_pl']:.2f} avg_pl=${metrics['average_pl']:.2f}"
+        )
+        for name, metrics in group.items()
+    ]
+
+
 def run_scan(args: argparse.Namespace) -> None:
     config = load_config()
     selected_mode = args.mode or config.strategy["default_mode"]
@@ -604,6 +919,18 @@ def main() -> None:
             run_packet_review(args)
         elif args.command == "daily-report":
             run_daily_report(args)
+        elif args.command == "dashboard":
+            run_dashboard(args)
+        elif args.command == "backtest":
+            run_historical_backtest(args)
+        elif args.command == "backtest-scenarios":
+            run_backtest_scenarios(args)
+        elif args.command == "hydrate-history":
+            run_hydrate_history(args)
+        elif args.command == "backtest-stock-diagnostics":
+            run_backtest_stock_diagnostics(args)
+        elif args.command == "review-trades":
+            run_review_trades(args)
         else:
             run_scan(args)
     except RuntimeError as exc:

@@ -1,0 +1,53 @@
+from pathlib import Path
+
+from options_trading_assistant.cli import parse_args
+from options_trading_assistant.reports.dashboard import build_dashboard, render_dashboard_html
+
+
+def test_render_dashboard_html_includes_filters_and_report_data():
+    html = render_dashboard_html(
+        [
+            {
+                "type": "html",
+                "date": "2026-06-29",
+                "label": "2026-06-29 · Daily HTML Report",
+                "path": "data/reports/daily/report.html",
+                "content": "<h1>Daily Trading Report</h1>",
+            },
+            {
+                "type": "packet",
+                "date": "2026-06-29",
+                "label": "2026-06-29 · rejection · MSFT",
+                "path": "data/journal/decision_packets/packet.json",
+                "content": '{"ticker": "MSFT"}',
+            },
+        ]
+    )
+
+    assert "Options Trading Assistant Dashboard" in html
+    assert "dateFilter" in html
+    assert "reportSelect" in html
+    assert "Daily Trading Report" in html
+    assert "MSFT" in html
+
+
+def test_build_dashboard_writes_index_file(tmp_path):
+    path = build_dashboard(tmp_path / "index.html")
+
+    assert path.exists()
+    assert path.name == "index.html"
+    assert "Options Trading Assistant Dashboard" in path.read_text(encoding="utf-8")
+
+
+def test_dashboard_cli_accepts_serve_options(monkeypatch):
+    monkeypatch.setattr(
+        "sys.argv",
+        ["ota", "dashboard", "--serve", "--host", "127.0.0.1", "--port", "8766"],
+    )
+
+    args = parse_args()
+
+    assert args.command == "dashboard"
+    assert args.serve is True
+    assert args.host == "127.0.0.1"
+    assert args.port == 8766

@@ -102,6 +102,14 @@ def score_options(spread: OptionSpread, trade_config: dict, as_of: date) -> floa
     if spread.reward_to_risk < trade_config["min_reward_to_risk"]:
         return 0.0
 
+    min_debit_pct = trade_config.get("min_debit_pct_of_width")
+    max_debit_pct = trade_config.get("max_debit_pct_of_width")
+    debit_pct = spread.debit / spread.width if spread.width else 0.0
+    if min_debit_pct is not None and debit_pct < min_debit_pct:
+        return 0.0
+    if max_debit_pct is not None and debit_pct > max_debit_pct:
+        return 0.0
+
     score = 0.0
     score += 2.0 if trade_config["min_days_to_expiration"] <= dte <= trade_config["max_days_to_expiration"] else 0.0
     score += 2.0 if spread.width in trade_config["preferred_spread_widths"] else 0.0

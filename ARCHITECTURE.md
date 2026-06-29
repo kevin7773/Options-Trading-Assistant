@@ -29,6 +29,7 @@ A quiet scanner is a feature, not a bug.
 9. Broker/data providers are replaceable infrastructure, not strategy logic.
 10. Paper trading and live trading must remain explicitly separate.
 11. No trade is always an acceptable answer.
+12. Backtests evaluate strategy rules; they must not silently change those rules.
 
 ## Pipeline
 
@@ -115,6 +116,7 @@ Current providers:
 
 - `MockDataProvider`
 - `MoomooDataProvider`
+- `HistoricalDataProvider`
 
 ### `options_trading_assistant.engines`
 
@@ -127,6 +129,12 @@ Scoring, filtering, scanner orchestration, and future trade-management logic bel
 Owns durable output and human/machine-readable reports.
 
 Journal output should preserve enough information for later post-trade analysis.
+
+### `options_trading_assistant.backtesting`
+
+Owns historical scanner orchestration, simulated spread outcomes, and summary metrics.
+
+Backtesting code may reconstruct provider snapshots and estimate outcomes, but it must call the existing scanner rather than duplicating or bypassing strategy rules.
 
 ### `options_trading_assistant.cli`
 
@@ -153,6 +161,21 @@ ScanResult / workbench output
     |
     v
 Journal / reports / future paper trading
+```
+
+Historical research follows the same scanner path:
+
+```text
+Historical OHLCV cache / Massive hydrate
+    |
+    v
+HistoricalDataProvider
+    |
+    v
+DailyScanner
+    |
+    v
+Backtest artifacts / metrics / simulated decision packets
 ```
 
 ## Workbench Commands
@@ -186,6 +209,12 @@ Known Moomoo details:
 - Option contract snapshots provide bid, ask, delta, open interest, volume, and implied volatility.
 - Moomoo option IV is returned as a percentage and must be normalized to decimal form before scoring.
 
+Known historical provider details:
+
+- Massive stock aggregate bars are cached locally before scanner execution.
+- The default Massive throttle is 5 calls per minute.
+- Historical options are initially modeled with simplified spread assumptions; this is a research approximation, not executable trading output.
+
 ## Configuration
 
 Strategy thresholds, weights, universe definitions, and broker/provider settings belong in `config/*.yaml`.
@@ -214,6 +243,7 @@ Required coverage areas:
 - Provider normalization helpers.
 - Journal serialization.
 - CLI formatting for workbench commands.
+- Backtest metrics and artifact creation.
 
 Mock data must represent valid and invalid cases honestly. If a mock candidate claims to be tradable, it must satisfy the same hard rules as a live candidate.
 
@@ -244,7 +274,7 @@ The journal should support:
 
 ## Known Limitations
 
-- Backtesting is not implemented yet.
+- Backtesting uses simplified option-spread outcome assumptions first.
 - Paper trading is not implemented yet.
 - Live trading is intentionally not implemented.
 - VIX is not directly available through the current Moomoo OpenD route.

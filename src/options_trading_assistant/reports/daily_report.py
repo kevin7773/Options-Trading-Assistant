@@ -5,7 +5,7 @@ from html import escape
 from pathlib import Path
 
 from options_trading_assistant.config import PROJECT_ROOT
-from options_trading_assistant.models import RecommendationAction, ScanResult
+from options_trading_assistant.models import RecommendationAction, RejectionStage, ScanResult
 
 
 def write_daily_report(
@@ -36,11 +36,13 @@ def write_daily_report_html(
 
 def format_report_footer(result: ScanResult, decision_packet_count: int) -> str:
     context = result.context
+    market_rejected = _is_market_rejection(result)
+    scan_note = " — skipped due to market rejection" if market_rejected else ""
     lines = [
         "",
         "Report Context",
-        f"- Stocks scanned: {context.stocks_scanned}",
-        f"- Option spreads evaluated: {context.spreads_evaluated}",
+        f"- Stocks scanned: {context.stocks_scanned}{scan_note}",
+        f"- Option spreads evaluated: {context.spreads_evaluated}{scan_note}",
         f"- Volatility source: {context.volatility_source or 'unknown'}",
         f"- Decision packets written: {decision_packet_count}",
     ]
@@ -49,11 +51,15 @@ def format_report_footer(result: ScanResult, decision_packet_count: int) -> str:
         for sector in context.top_sectors[:5]:
             eligible = "eligible" if sector.eligible else "not eligible"
             lines.append(f"  - {sector.rank}. {sector.sector} ({sector.etf}) {sector.score:.2f}/15, {eligible}")
+    elif market_rejected:
+        lines.append("- Top sectors: sector ranking skipped because market gate failed.")
     return "\n".join(lines)
 
 
 def format_daily_report_html(result: ScanResult, decision_packet_count: int) -> str:
     action_class = "buy" if result.action == RecommendationAction.BUY else "sitout"
+    market_rejected = _is_market_rejection(result)
+    scan_note = '<small>skipped due to market rejection</small>' if market_rejected else ""
     recommendation_html = "".join(_recommendation_card(candidate) for candidate in result.recommendations)
     if not recommendation_html:
         recommendation_html = '<p class="muted">No trade recommendations passed the configured rules.</p>'
@@ -69,7 +75,11 @@ def format_daily_report_html(result: ScanResult, decision_packet_count: int) -> 
         for sector in result.context.top_sectors[:5]
     )
     if not sectors:
-        sectors = '<li class="muted">No sector ranking available.</li>'
+        sectors = (
+            '<li class="muted">Sector ranking skipped because market gate failed.</li>'
+            if market_rejected
+            else '<li class="muted">No sector ranking available.</li>'
+        )
 
     return f"""<!doctype html>
 <html>
@@ -123,6 +133,7 @@ def format_daily_report_html(result: ScanResult, decision_packet_count: int) -> 
     }}
     .metric span {{ display: block; color: #667085; font-size: 12px; }}
     .metric strong {{ display: block; margin-top: 4px; font-size: 18px; }}
+    .metric small {{ display: block; color: #667085; font-size: 11px; margin-top: 4px; }}
     .card {{
       background: #ffffff;
       border: 1px solid #d9dee7;
@@ -179,8 +190,8 @@ def format_daily_report_html(result: ScanResult, decision_packet_count: int) -> 
 
     <div class="grid">
       <div class="metric"><span>Market Score</span><strong>{result.market_score:.2f}/30</strong></div>
-      <div class="metric"><span>Stocks Scanned</span><strong>{result.context.stocks_scanned}</strong></div>
-      <div class="metric"><span>Spreads Evaluated</span><strong>{result.context.spreads_evaluated}</strong></div>
+      <div class="metric"><span>Stocks Scanned</span><strong>{result.context.stocks_scanned}</strong>{scan_note}</div>
+      <div class="metric"><span>Spreads Evaluated</span><strong>{result.context.spreads_evaluated}</strong>{scan_note}</div>
       <div class="metric"><span>Decision Packets</span><strong>{decision_packet_count}</strong></div>
     </div>
 
@@ -242,4 +253,13 @@ def _rejection_row(rejection) -> str:
         f"<td>{escape(score)}</td>"
         f"<td>{escape(reasons)}</td>"
         "</tr>"
+    )
+
+
+def _is_market_rejection(result: ScanResult) -> bool:
+    return (
+        result.action == RecommendationAction.SIT_TODAY_OUT
+        and any(rejection.stage == RejectionStage.MARKET for rejection in result.rejections)
+        and result.context.stocks_scanned == 0
+        and result.context.spreads_evaluated == 0
     )

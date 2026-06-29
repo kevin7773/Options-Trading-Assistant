@@ -360,6 +360,13 @@ class DailyScanner:
             reasons.append("Debit is zero or negative.")
         if spread.debit >= spread.width:
             reasons.append("Debit is at or above spread width.")
+        debit_pct = spread.debit / spread.width if spread.width else 0.0
+        min_debit_pct = trade_config.get("min_debit_pct_of_width")
+        max_debit_pct = trade_config.get("max_debit_pct_of_width")
+        if min_debit_pct is not None and debit_pct < min_debit_pct:
+            reasons.append(f"Debit {debit_pct:.2%} below scenario minimum {min_debit_pct:.0%}.")
+        if max_debit_pct is not None and debit_pct > max_debit_pct:
+            reasons.append(f"Debit {debit_pct:.2%} above scenario maximum {max_debit_pct:.0%}.")
         if not (trade_config["min_days_to_expiration"] <= dte <= trade_config["max_days_to_expiration"]):
             reasons.append(
                 f"Days to expiration {dte} outside configured range "

@@ -73,6 +73,42 @@ python -m options_trading_assistant.cli daily-report --provider moomoo --mode ba
 Daily reports are saved under `data/reports/daily/`.
 The command writes both Markdown and HTML versions; the scheduled Gmail draft uses the HTML version for a cleaner email body.
 
+Build the local report dashboard:
+
+```powershell
+python -m options_trading_assistant.cli dashboard --serve
+```
+
+Run a historical backtest from cached OHLCV files:
+
+```powershell
+python -m options_trading_assistant.cli backtest --start 2025-01-01 --end 2025-12-31 --mode balanced --data-source cache
+```
+
+Hydrate historical bars from Massive first, respecting the default 5 calls/minute limit:
+
+```powershell
+$env:MASSIVE_API_KEY="..."
+python -m options_trading_assistant.cli backtest --start 2025-01-01 --end 2025-12-31 --mode balanced --data-source massive --calls-per-minute 5
+```
+
+For indicator accuracy, hydrate enough warmup history before the backtest window. A 2025 backtest should have 2024 bars cached so 90-day trends and 100/200-day moving averages are meaningful:
+
+```powershell
+python -m options_trading_assistant.cli hydrate-history --start 2024-01-01 --end 2025-12-31 --calls-per-minute 5
+python -m options_trading_assistant.cli backtest --start 2025-01-01 --end 2025-12-31 --mode balanced --data-source cache
+```
+
+Inspect why the stock-selection layer rejected candidates on a historical date:
+
+```powershell
+python -m options_trading_assistant.cli backtest-stock-diagnostics --date 2025-04-24 --mode balanced --limit 25
+```
+
+Backtest outputs are written under `backtesting/results/<run-id>/` and include `summary.json`, `trades.jsonl`, `scan_results.jsonl`, and simulated decision packets. This is still read-only research infrastructure; it does not place live or paper orders.
+
+Historical option spreads use the v1 synthetic options model in `synthetic_options_model.py`. It estimates debit from strike moneyness, DTE, an IV proxy, expected move/ATR, and spread width, then records the estimated debit, debit percent of width, expected move, strike distances, estimated reward/risk, and pricing rationale in the spread payload.
+
 ## Test
 
 ```powershell
