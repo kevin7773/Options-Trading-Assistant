@@ -351,8 +351,10 @@ class MoomooDataProvider(DataProvider):
             max_count=max(days + 20, 260),
         )
         records = self._records(data)
-        if len(records) < min(days, 30):
-            raise MoomooProviderError(f"Not enough historical bars returned for {ticker}.")
+        if len(records) < days:
+            raise MoomooProviderError(
+                f"Not enough historical bars returned for {ticker}: requested {days}, received {len(records)}."
+            )
         return records
 
     def _option_expirations(self, ticker: str) -> list[date]:
@@ -604,15 +606,23 @@ class MoomooDataProvider(DataProvider):
 
     @classmethod
     def _making_lower_lows(cls, history) -> bool:
-        closes = cls._close_series(history)
-        lows = [min(closes[-window:]) for window in (5, 10, 20)]
-        return lows[0] < lows[1] < lows[2]
+        if len(history) < 15:
+            return False
+        lows = [
+            cls._row_number(row, ["low", "close", "last_close", "close_price"])
+            for row in history[-15:]
+        ]
+        older_low = min(lows[:5])
+        middle_low = min(lows[5:10])
+        recent_low = min(lows[10:])
+        return recent_low < middle_low < older_low
 
     @classmethod
     def _confirmation_signals(cls, history, sector_history) -> tuple[str, ...]:
         closes = cls._close_series(history)
         signals = []
-        if closes[-1] > closes[-2]:
+        current_open = cls._row_number(history[-1], ["open"])
+        if current_open > 0 and closes[-1] > current_open:
             signals.append("green_daily_candle")
         if min(closes[-3:]) > min(closes[-6:-3]):
             signals.append("higher_low")
@@ -623,8 +633,15 @@ class MoomooDataProvider(DataProvider):
             signals.append("rsi_turning_up")
         if cls._pct_change(history, 5) > cls._pct_change(sector_history, 5):
             signals.append("stock_outperforming_sector_etf")
-        if closes[-1] > cls._moving_average(history, 20):
+        if (
+            len(history) >= 21
+            and closes[-1] > cls._moving_average(history, 20)
+            and closes[-2] <= cls._moving_average(history[:-1], 20)
+        ):
             signals.append("reclaim_of_20_day_moving_average")
+        prior_highs = [cls._row_number(row, ["high"]) for row in history[-21:-1]]
+        if prior_highs and all(value > 0 for value in prior_highs) and closes[-1] > max(prior_highs):
+            signals.append("break_above_recent_swing_high")
         return tuple(signals)
 
     @classmethod

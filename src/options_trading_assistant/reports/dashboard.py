@@ -49,7 +49,12 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
 
 
 def render_dashboard_html(items: list[dict[str, Any]]) -> str:
-    data_json = json.dumps(items, ensure_ascii=False)
+    data_json = (
+        json.dumps(items, ensure_ascii=False)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
     generated_at = datetime.now().isoformat(timespec="seconds")
     return f"""<!doctype html>
 <html>

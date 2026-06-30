@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 
 from options_trading_assistant.config import load_config
@@ -63,3 +64,27 @@ def test_scanner_collects_stock_rejection_reasons():
     assert stock_rejections
     assert any(rejection.ticker == "UNH" for rejection in stock_rejections)
     assert all(rejection.reasons for rejection in stock_rejections)
+
+
+class SoftOptionPreferenceProvider(MockDataProvider):
+    def get_option_spreads(self, ticker, as_of):
+        spreads = super().get_option_spreads(ticker, as_of)
+        if ticker != "ISRG":
+            return spreads
+        return (
+            replace(
+                spreads[0],
+                long_open_interest=10,
+                short_open_interest=10,
+                bid_ask_width_pct=0.12,
+            ),
+        )
+
+
+def test_soft_option_preferences_reduce_score_without_forcing_rejection():
+    scanner = DailyScanner(config=load_config(), provider=SoftOptionPreferenceProvider())
+
+    result = scanner.run(mode="balanced", as_of=date(2026, 6, 26))
+
+    assert result.action == RecommendationAction.BUY
+    assert result.recommendations[0].stock.ticker == "ISRG"

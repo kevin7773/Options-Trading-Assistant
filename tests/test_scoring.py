@@ -1,7 +1,14 @@
 from datetime import date
 
 from options_trading_assistant.config import load_config
-from options_trading_assistant.engines.scoring import market_block_reason, passes_mean_reversion, score_market, score_options
+from options_trading_assistant.engines.scoring import (
+    build_score_breakdown,
+    grade_for_score,
+    market_block_reason,
+    passes_mean_reversion,
+    score_market,
+    score_options,
+)
 from options_trading_assistant.models import MarketSnapshot, OptionSpread, StockSnapshot
 
 
@@ -35,6 +42,26 @@ def test_score_market_caps_at_30_points():
     )
 
     assert score_market(snapshot, config.strategy["market"]) == 30
+
+
+def test_market_block_reason_honors_volatility_proxy_risk_off():
+    config = load_config()
+    snapshot = MarketSnapshot(
+        as_of=date(2026, 6, 26),
+        spy_above_20dma=True,
+        nasdaq_above_20dma=True,
+        vix=0,
+        vix_rising=True,
+        distribution_days=0,
+        breadth_score=0.8,
+        growth_participation_score=0.8,
+        volatility_source="VIXY",
+        volatility_risk_off=True,
+    )
+
+    reason = market_block_reason(snapshot, config.strategy["market"])
+
+    assert reason == "VIXY volatility proxy is signaling risk-off conditions."
 
 
 def test_score_options_zeroes_spread_with_poor_reward_to_risk():
@@ -100,3 +127,27 @@ def test_passes_mean_reversion_uses_configured_pullback_and_rsi_thresholds():
 
     assert passes_mean_reversion(stock, strict_config) is False
     assert passes_mean_reversion(stock, loose_config) is True
+
+
+def test_score_breakdown_applies_configured_weights_and_grade_thresholds():
+    score = build_score_breakdown(
+        market_score=30,
+        sector_score=15,
+        trend_score=20,
+        confirmation_score=20,
+        options_score=15,
+        scoring_config={
+            "weights": {
+                "market": 1,
+                "sector": 0,
+                "trend": 0,
+                "confirmation": 0,
+                "options": 0,
+            }
+        },
+    )
+
+    assert score.market == 100
+    assert score.sector == 0
+    assert score.total == 100
+    assert grade_for_score(88, {"strong_buy": 85, "buy": 75, "watchlist": 65}) == "A"

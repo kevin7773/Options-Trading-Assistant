@@ -13,6 +13,7 @@ from options_trading_assistant.backtesting.diagnostics import (
 from options_trading_assistant.backtesting.engine import run_backtest
 from options_trading_assistant.backtesting.scenarios import get_scenario, scenario_names
 from options_trading_assistant.config import load_config
+from options_trading_assistant.engines.cooling_off import CoolingOffTracker
 from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.engines.scoring import (
     passes_mean_reversion,
@@ -54,6 +55,19 @@ from options_trading_assistant.reports.packet_review import (
     packet_summary,
     summarize_packets,
     update_packet_outcome,
+)
+from options_trading_assistant.reports.signal_rankings import write_signal_ranking_snapshot
+from options_trading_assistant.validation.engine import (
+    evaluate_edge,
+    format_validation_report,
+    load_backtest_evidence,
+    load_packet_evidence,
+    load_validation_protocol,
+    result_to_dict,
+)
+from options_trading_assistant.validation.ranking import (
+    evaluate_ranking_criteria,
+    run_ranking_experiment,
 )
 
 
@@ -126,6 +140,11 @@ def parse_args() -> argparse.Namespace:
     backtest.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
     backtest.add_argument("--run-id", default=None, help="Optional stable output folder name.")
     backtest.add_argument("--scenario", default="balanced", help="Backtest scenario: balanced, high_probability, aggressive.")
+    backtest.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Write summary and trades without per-scan journals or decision packets.",
+    )
 
     scenarios = subparsers.add_parser("backtest-scenarios", help="Run multiple entry/exit scenarios over the same period.")
     scenarios.add_argument("--start", required=True, help="Backtest start date in YYYY-MM-DD format.")
@@ -136,6 +155,11 @@ def parse_args() -> argparse.Namespace:
     scenarios.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
     scenarios.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
     scenarios.add_argument("--scenarios", default="all", help="Comma-separated scenarios or 'all'.")
+    scenarios.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Write summary and trades without per-scan journals or decision packets.",
+    )
 
     hydrate = subparsers.add_parser("hydrate-history", help="Download historical OHLCV bars into the local cache.")
     hydrate.add_argument("--start", required=True, help="Hydration start date in YYYY-MM-DD format.")
@@ -159,6 +183,38 @@ def parse_args() -> argparse.Namespace:
     lifecycle = subparsers.add_parser("review-trades", help="Print trade lifecycle diagnostics for a backtest run.")
     lifecycle.add_argument("--run-dir", required=True, help="Backtest result directory containing trades.jsonl.")
     lifecycle.add_argument("--limit", type=int, default=None, help="Maximum trades to show.")
+
+    validate_edge = subparsers.add_parser(
+        "validate-edge",
+        help="Evaluate frozen-baseline evidence against the predeclared edge protocol.",
+    )
+    validate_edge.add_argument("--source", choices=("backtest", "packets"), default="backtest")
+    validate_edge.add_argument("--runs-root", default=None, help="Backtest result root containing trades.jsonl files.")
+    validate_edge.add_argument("--packet-root", default=None, help="Decision packet root for forward evidence.")
+    validate_edge.add_argument("--scenario", default="current_otm", help="Scenario name to evaluate.")
+    validate_edge.add_argument(
+        "--benchmark-scenario",
+        default=None,
+        help="Optional predeclared control scenario from the same backtest root.",
+    )
+    validate_edge.add_argument(
+        "--evidence-kind",
+        choices=("retrospective", "holdout", "forward"),
+        default="retrospective",
+    )
+    validate_edge.add_argument("--protocol", default=None, help="Validation protocol YAML path.")
+    validate_edge.add_argument("--output-dir", default=None, help="Validation report output directory.")
+
+    ranking = subparsers.add_parser(
+        "ranking-experiment",
+        help="Save each market-pass day's top-ranked stocks and evaluate forward performance.",
+    )
+    ranking.add_argument("--start", required=True, help="Experiment start date in YYYY-MM-DD format.")
+    ranking.add_argument("--end", required=True, help="Experiment end date in YYYY-MM-DD format.")
+    ranking.add_argument("--cache-dir", required=True, help="Historical OHLCV cache directory.")
+    ranking.add_argument("--mode", default=None, help="Scanner mode, normally balanced.")
+    ranking.add_argument("--protocol", default=None, help="Validation protocol YAML path.")
+    ranking.add_argument("--output-dir", default=None, help="Ranking artifact output directory.")
 
     parser.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
     parser.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
@@ -526,6 +582,7 @@ def run_stock_scan(args: argparse.Namespace) -> None:
     as_of = parse_scan_date(args.as_of)
     selected_mode = args.mode or config.strategy["default_mode"]
     mode_config = config.strategy["modes"][selected_mode]
+    cooling_off_tracker = CoolingOffTracker.from_decision_packets(config)
     provider = build_provider(args.provider, config)
     try:
         stocks = provider.get_stocks_for_sector(args.sector, as_of)
@@ -547,9 +604,17 @@ def run_stock_scan(args: argparse.Namespace) -> None:
             required_signals,
             config.strategy,
         )
+        cooling_reason = cooling_off_tracker.rejection_reason(stock)
+        if cooling_reason:
+            mean_reversion_pass = False
+            reasons.insert(0, cooling_reason)
         rows.append((stock, trend_score_value, confirmation_score_value, mean_reversion_pass, reasons))
 
-    ranked = sorted(rows, key=lambda item: (not item[4], item[1] + item[2]), reverse=True)[: args.limit]
+    ranked = sorted(
+        rows,
+        key=lambda item: (item[3] and not item[4], item[1] + item[2]),
+        reverse=True,
+    )[: args.limit]
     print(format_stock_scan(args.sector, as_of, ranked))
 
 
@@ -602,8 +667,16 @@ def run_daily_report(args: argparse.Namespace) -> None:
 
     provider = build_provider(selected_provider, config)
     try:
-        scanner = DailyScanner(config=config, provider=provider)
-        result = scanner.run(mode=selected_mode, as_of=as_of)
+        scanner = DailyScanner(
+            config=config,
+            provider=provider,
+            cooling_off_tracker=CoolingOffTracker.from_decision_packets(config),
+        )
+        result = scanner.run(
+            mode=selected_mode,
+            as_of=as_of,
+            include_all_signal_rankings=True,
+        )
     finally:
         close = getattr(provider, "close", None)
         if close:
@@ -613,6 +686,8 @@ def run_daily_report(args: argparse.Namespace) -> None:
     if not args.no_log:
         append_scan_result(result)
         packet_paths = write_decision_packets(result)
+        if scanner.last_signal_result is not None:
+            write_signal_ranking_snapshot(scanner.last_signal_result)
 
     report_content = "\n".join(
         [
@@ -669,6 +744,7 @@ def run_historical_backtest(args: argparse.Namespace) -> None:
         end=end,
         run_id=args.run_id,
         scenario=scenario,
+        detailed_artifacts=not args.summary_only,
     )
     print(format_backtest_summary(result.summary))
     print(f"Backtest artifacts: {result.output_dir}")
@@ -707,6 +783,7 @@ def run_backtest_scenarios(args: argparse.Namespace) -> None:
             start=start,
             end=end,
             scenario=scenario,
+            detailed_artifacts=not args.summary_only,
         )
         results.append(result)
     print(format_scenario_comparison(results))
@@ -783,6 +860,89 @@ def run_review_trades(args: argparse.Namespace) -> None:
         if line.strip()
     ]
     print(format_trade_lifecycle_report(trades[: args.limit] if args.limit else trades))
+
+
+def run_edge_validation(args: argparse.Namespace) -> None:
+    protocol = load_validation_protocol(Path(args.protocol) if args.protocol else None)
+    if args.source == "packets":
+        packet_root = (
+            Path(args.packet_root)
+            if args.packet_root
+            else Path("data") / "journal" / "decision_packets"
+        )
+        evidence = load_packet_evidence(packet_root)
+        benchmark = None
+    else:
+        if not args.runs_root:
+            raise RuntimeError("--runs-root is required for backtest edge validation.")
+        runs_root = Path(args.runs_root)
+        evidence = load_backtest_evidence(runs_root, args.scenario)
+        benchmark = (
+            load_backtest_evidence(runs_root, args.benchmark_scenario)
+            if args.benchmark_scenario
+            else None
+        )
+    result = evaluate_edge(
+        evidence=evidence,
+        scenario=args.scenario,
+        evidence_kind=args.evidence_kind,
+        protocol=protocol,
+        benchmark_evidence=benchmark,
+    )
+    report = format_validation_report(result)
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir
+        else Path("backtesting") / "results" / "edge-validation" / args.scenario
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "validation.md").write_text(report, encoding="utf-8")
+    (output_dir / "validation.json").write_text(
+        json.dumps(result_to_dict(result), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    print(report)
+    print(f"Validation artifacts: {output_dir}")
+
+
+def run_ranking_validation(args: argparse.Namespace) -> None:
+    config = load_config()
+    protocol = load_validation_protocol(Path(args.protocol) if args.protocol else None)
+    ranking_config = protocol["ranking_experiment"]
+    provider = HistoricalDataProvider.from_cache(
+        config=config,
+        cache_dir=Path(args.cache_dir),
+    )
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir
+        else Path("backtesting") / "results" / "ranking-experiment"
+    )
+    summary = run_ranking_experiment(
+        config=config,
+        provider=provider,
+        mode=args.mode or config.strategy["default_mode"],
+        start=parse_scan_date(args.start),
+        end=parse_scan_date(args.end),
+        top_n=int(ranking_config["top_n"]),
+        horizons=[int(value) for value in ranking_config["horizons"]],
+        output_dir=output_dir,
+    )
+    criteria = evaluate_ranking_criteria(summary, protocol)
+    summary["criteria"] = criteria
+    (output_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    report = (output_dir / "summary.md").read_text(encoding="utf-8")
+    report += (
+        "\n## Predeclared Verdict\n\n"
+        f"**{criteria['verdict']}** at the {criteria['primary_horizon']}-day primary horizon.\n"
+    )
+    (output_dir / "summary.md").write_text(report, encoding="utf-8")
+    print(report)
+    print(f"Verdict at {criteria['primary_horizon']} days: {criteria['verdict']}")
+    print(f"Ranking artifacts: {output_dir}")
 
 
 def format_trade_lifecycle_report(trades: list[dict]) -> str:
@@ -883,8 +1043,16 @@ def run_scan(args: argparse.Namespace) -> None:
 
     provider = build_provider(selected_provider, config)
     try:
-        scanner = DailyScanner(config=config, provider=provider)
-        result = scanner.run(mode=selected_mode, as_of=as_of)
+        scanner = DailyScanner(
+            config=config,
+            provider=provider,
+            cooling_off_tracker=CoolingOffTracker.from_decision_packets(config),
+        )
+        result = scanner.run(
+            mode=selected_mode,
+            as_of=as_of,
+            include_all_signal_rankings=True,
+        )
     finally:
         close = getattr(provider, "close", None)
         if close:
@@ -896,6 +1064,9 @@ def run_scan(args: argparse.Namespace) -> None:
         print(f"\nLogged scan result to: {path}")
         packet_paths = write_decision_packets(result)
         print(f"Logged decision packets: {len(packet_paths)}")
+        if scanner.last_signal_result is not None:
+            ranking_path = write_signal_ranking_snapshot(scanner.last_signal_result)
+            print(f"Logged signal ranking snapshot: {ranking_path}")
 
 
 def main() -> None:
@@ -931,6 +1102,10 @@ def main() -> None:
             run_backtest_stock_diagnostics(args)
         elif args.command == "review-trades":
             run_review_trades(args)
+        elif args.command == "validate-edge":
+            run_edge_validation(args)
+        elif args.command == "ranking-experiment":
+            run_ranking_validation(args)
         else:
             run_scan(args)
     except RuntimeError as exc:

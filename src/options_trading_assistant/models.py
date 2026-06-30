@@ -15,6 +15,7 @@ class RecommendationAction(str, Enum):
 class RejectionStage(str, Enum):
     MARKET = "market"
     SECTOR = "sector"
+    COOLING_OFF = "cooling_off"
     TREND = "trend"
     MEAN_REVERSION = "mean_reversion"
     CONFIRMATION = "confirmation"
@@ -136,6 +137,29 @@ class TradeCandidate:
     grade: str
     rationale: tuple[str, ...]
     risks: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SignalCandidate:
+    stock: StockSnapshot
+    sector: SectorSnapshot
+    market_score: float
+    sector_score: float
+    trend_score: float
+    confirmation_score: float
+
+    @property
+    def ranking_score(self) -> float:
+        return self.sector_score + self.trend_score + self.confirmation_score
+
+
+@dataclass(frozen=True)
+class RankedStockSignal:
+    signal: SignalCandidate
+    sector_rank: int
+    sector_eligible: bool
+    qualified: bool
+    rejection: RejectedCandidate | None = None
 
 
 @dataclass(frozen=True)

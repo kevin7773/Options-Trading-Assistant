@@ -77,7 +77,8 @@ def _base_packet(result: ScanResult) -> dict[str, Any]:
 
 
 def _scan_slug(result: ScanResult) -> str:
-    return f"{result.strategy_version}-{result.mode}-{result.action.value.lower().replace(' ', '-')}"
+    timestamp = datetime.now().strftime("%H%M%S-%f")
+    return f"{result.strategy_version}-{result.mode}-{result.action.value.lower().replace(' ', '-')}-{timestamp}"
 
 
 def _safe_filename(value: str) -> str:

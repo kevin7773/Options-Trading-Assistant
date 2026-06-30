@@ -1,0 +1,50 @@
+protocol_version: edge_validation_v1
+baseline_version: v4.1
+baseline_manifest: validation/baselines/v4.1-manifest.json
+
+evidence:
+  pass_eligible_kinds: [holdout, forward]
+  retrospective_role: falsification_only
+  forward_start: 2026-06-30
+
+costs:
+  round_trip_cost_per_spread: 4.00
+
+acceptance:
+  minimum_independent_setups: 30
+  minimum_active_periods: 3
+  minimum_profitable_period_ratio: 0.60
+  minimum_expectancy_r: 0.05
+  minimum_profit_factor: 1.20
+  minimum_bootstrap_expectancy_r: 0.00
+  maximum_drawdown_r: 5.00
+  confidence_level: 0.95
+  bootstrap_samples: 5000
+  require_benchmark: true
+  minimum_benchmark_lift_r: 0.05
+
+independence:
+  setup_key: [entry_date, ticker]
+  correlated_spreads_count_as_one_setup: true
+
+period_roles:
+  2023: retrospective
+  2024: retrospective
+  2025: retrospective
+  2026_ytd: retrospective
+  forward_paper: forward
+
+ranking_experiment:
+  top_n: 10
+  horizons: [5, 10, 20]
+  primary_horizon: 20
+  minimum_evaluated_days: 100
+  minimum_independent_cohorts: 30
+  minimum_rank1_best_rate: 0.55
+  minimum_top3_capture_rate: 0.75
+  minimum_mean_rank_correlation: 0.10
+  eligible_universe: all_configured_stocks_on_market_pass_days
+  complexity_benchmarks:
+    required: [random_eligible, spy, qqq, top_sector_etf]
+    minimum_average_return_lift: 0.00
+    oracle_role: unattainable_upper_bound

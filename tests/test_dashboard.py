@@ -39,6 +39,23 @@ def test_build_dashboard_writes_index_file(tmp_path):
     assert "Options Trading Assistant Dashboard" in path.read_text(encoding="utf-8")
 
 
+def test_dashboard_escapes_script_terminators_in_embedded_report_json():
+    html = render_dashboard_html(
+        [
+            {
+                "type": "packet",
+                "date": "2026-06-29",
+                "label": "malicious note",
+                "path": "packet.json",
+                "content": "</script><script>alert('xss')</script>",
+            }
+        ]
+    )
+
+    assert "</script><script>alert('xss')</script>" not in html
+    assert "\\u003c/script\\u003e" in html
+
+
 def test_dashboard_cli_accepts_serve_options(monkeypatch):
     monkeypatch.setattr(
         "sys.argv",

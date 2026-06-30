@@ -54,7 +54,7 @@ Review logged scan outcomes and rejection patterns:
 python -m options_trading_assistant.cli review-journal --days 30
 ```
 
-Logged scans also write per-decision JSON packets under `data/journal/decision_packets/`.
+Logged scans also write per-decision JSON packets under `data/journal/decision_packets/` and prospective Top-10 signal snapshots under `data/journal/signal_rankings/`.
 
 List and update decision packet outcomes:
 
@@ -105,6 +105,20 @@ Inspect why the stock-selection layer rejected candidates on a historical date:
 python -m options_trading_assistant.cli backtest-stock-diagnostics --date 2025-04-24 --mode balanced --limit 25
 ```
 
+Evaluate frozen evidence against the Phase 2 edge-validation protocol:
+
+```powershell
+python -m options_trading_assistant.cli validate-edge --source backtest --runs-root backtesting/results/v4.1-strike-durability --scenario current_otm --evidence-kind retrospective
+```
+
+Save every market-pass day's top ten stocks and evaluate their forward ranking performance:
+
+```powershell
+python -m options_trading_assistant.cli ranking-experiment --start 2023-01-01 --end 2026-06-29 --cache-dir data/historical/yahoo_2022_2026 --mode balanced
+```
+
+See `docs/edge_validation.md` for the frozen-baseline protocol and change-control rules.
+
 Backtest outputs are written under `backtesting/results/<run-id>/` and include `summary.json`, `trades.jsonl`, `scan_results.jsonl`, and simulated decision packets. This is still read-only research infrastructure; it does not place live or paper orders.
 
 Historical option spreads use the v1 synthetic options model in `synthetic_options_model.py`. It estimates debit from strike moneyness, DTE, an IV proxy, expected move/ATR, and spread width, then records the estimated debit, debit percent of width, expected move, strike distances, estimated reward/risk, and pricing rationale in the spread payload.
@@ -122,6 +136,7 @@ python -m pytest
 - Mock market, sector, stock, and option spread data.
 - Optional read-only Moomoo OpenD market-data provider.
 - Market gate that can return `SIT TODAY OUT`.
+- Cooling-off enforcement after consecutive failed bullish spreads, with technical re-entry criteria.
 - Ranked candidate recommendations when setups meet thresholds.
 - JSONL scan logging under `data/journal/`.
 # Options-Trading-Assistant

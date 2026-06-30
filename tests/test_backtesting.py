@@ -4,9 +4,10 @@ from options_trading_assistant.backtesting.diagnostics import (
     build_stock_diagnostics_report,
     format_stock_diagnostics_report,
 )
-from options_trading_assistant.backtesting.engine import run_backtest
+from options_trading_assistant.backtesting.engine import run_backtest, simulate_spread_outcome
 from options_trading_assistant.backtesting.models import OHLCVBar
 from options_trading_assistant.config import load_config
+from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.models import MarketSnapshot, OptionSpread, SectorSnapshot, StockSnapshot
 from options_trading_assistant.providers.base import DataProvider
 
@@ -117,6 +118,26 @@ def test_backtest_runner_writes_artifacts_and_summary(tmp_path):
     assert "market_score_entry" in trade_payload
 
 
+def test_summary_only_backtest_skips_per_scan_artifacts(tmp_path):
+    result = run_backtest(
+        config=load_config(),
+        provider=ScriptedBacktestProvider(),
+        mode="balanced",
+        start=date(2026, 1, 2),
+        end=date(2026, 1, 3),
+        output_root=tmp_path,
+        run_id="summary-only",
+        detailed_artifacts=False,
+    )
+
+    run_dir = tmp_path / "summary-only"
+    assert result.trade_count == 1
+    assert (run_dir / "summary.json").exists()
+    assert (run_dir / "trades.jsonl").exists()
+    assert not (run_dir / "scan_results.jsonl").exists()
+    assert not (run_dir / "decision_packets").exists()
+
+
 def test_stock_diagnostics_rank_and_explain_candidates():
     report = build_stock_diagnostics_report(
         config=load_config(),
@@ -134,3 +155,25 @@ def test_stock_diagnostics_rank_and_explain_candidates():
     assert "Top 1 stocks ranked" in output
     assert "[pass] Above 100 DMA" in output
     assert "Eligible" in output
+
+
+def test_backtest_does_not_use_entry_day_high_for_profit_target():
+    class EntryDaySpikeProvider(ScriptedBacktestProvider):
+        def close_on_or_before(self, ticker, target):
+            return target, 100.0
+
+        def bars_between(self, ticker, start, end):
+            return (
+                OHLCVBar(ticker, start, 100, 110, 99, 100, 1_000_000),
+                OHLCVBar(ticker, end, 100, 100, 100, 100, 1_000_000),
+            )
+
+    provider = EntryDaySpikeProvider()
+    config = load_config()
+    entry_date = date(2026, 1, 3)
+    result = DailyScanner(config, provider).run("balanced", entry_date)
+
+    trade = simulate_spread_outcome(provider, config, result, result.recommendations[0])
+
+    assert trade.profit_target_touched is False
+    assert trade.highest_underlying_price == 100
