@@ -58,7 +58,7 @@ Material tests should also create an experiment manifest under `research/experim
 | H-003 | Reachability guard reduces false positives by requiring the long strike to be reachable within expected move. | Accepted | v4.1 | Backtest comparison and v4.2 frozen construction. | Production: keep reachability guard. |
 | H-004 | High-probability mode improves overall performance versus balanced mode. | Rejected | v4.2 | Higher drawdown and fewer trades despite slightly higher expectancy. | Stay on balanced; keep high-probability research-only unless new evidence appears. |
 | H-005 | Semiconductors require the tested high-beta recovery profile. | Rejected | v4.2 | `EXP-2026-001`: expectancy declined, drawdown worsened, and semiconductor losses increased. | Do not promote this profile; open a new hypothesis for any different semiconductor treatment. |
-| H-006 | Pre-entry scores and trade-construction features can predict trade quality. | Active | v4.2 | Prospective decision packets now record measurement-only features before outcomes are known. | Collect data only; do not change trading rules until calibration is proven. |
+| H-006 | Pre-entry scores, rejection context, and skipped environments can predict future trade quality. | Active | v4.2 | Prospective decision packets now record measurement-only features before outcomes are known. | Collect data only; compare recommendations, near-misses, and sit-out environments before changing rules. |
 | H-012 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
 | H-013 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
 
@@ -102,6 +102,15 @@ baseline: v4.2
 measurement_only: true
 
 features_recorded:
+  decision_context:
+    - decision_type
+    - recommended
+    - rejected
+    - sit_out
+    - action
+    - reason
+    - stage
+    - score_observed
   scores:
     - score_total
     - score_bucket
@@ -143,6 +152,8 @@ future_questions:
   - Does confirmation score predict win rate or average loss?
   - Does distance to long strike predict max adverse excursion?
   - Does IV rank or expected move identify fragile entries?
+  - Do rejected near-misses outperform completed recommendations?
+  - Do sit-out days avoid worse forward market environments?
 ```
 
 ## Candidate v4.3 Research Hypotheses

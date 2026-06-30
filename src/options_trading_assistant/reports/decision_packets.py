@@ -29,7 +29,7 @@ def write_decision_packets(result: ScanResult, output_dir: Path | None = None) -
             "stock": asdict(recommendation.stock),
             "sector_snapshot": asdict(recommendation.sector),
             "spread": asdict(recommendation.spread),
-            "measurement_features": _measurement_features(result, recommendation),
+            "measurement_features": _recommendation_measurement_features(result, recommendation),
             "rationale": recommendation.rationale,
             "risks": recommendation.risks,
         }
@@ -49,6 +49,7 @@ def write_decision_packets(result: ScanResult, output_dir: Path | None = None) -
             "long_call": rejection.long_call,
             "short_call": rejection.short_call,
             "reasons": rejection.reasons,
+            "measurement_features": _rejection_measurement_features(result, rejection),
         }
         paths.append(_write_packet(scan_dir / f"rejection-{index:03d}-{_safe_filename(label)}.json", packet))
 
@@ -77,30 +78,68 @@ def _base_packet(result: ScanResult) -> dict[str, Any]:
     }
 
 
-def _measurement_features(result: ScanResult, recommendation) -> dict[str, Any]:
-    stock = recommendation.stock
-    sector = recommendation.sector
-    spread = recommendation.spread
+def _base_measurement_features(
+    result: ScanResult,
+    decision_type: str,
+    decision_id: str,
+    ticker: str | None = None,
+    sector: str | None = None,
+    stage: str | None = None,
+    score: float | None = None,
+) -> dict[str, Any]:
     return {
         "hypothesis_id": "H-006",
         "measurement_version": "trade_quality_pre_entry_v1",
         "measurement_only": True,
+        "decision_type": decision_type,
+        "decision_id": decision_id,
+        "recommended": decision_type == "recommendation",
+        "rejected": decision_type == "rejection",
+        "sit_out": result.action.value == "SIT TODAY OUT",
+        "action": result.action,
+        "reason": result.reason,
+        "ticker": ticker,
+        "sector": sector,
+        "stage": stage,
+        "score_observed": score,
+        "market_score_raw": result.market_score,
+        "market": _market_measurement(result),
+    }
+
+
+def _market_measurement(result: ScanResult) -> dict[str, Any]:
+    return {
+        "spy_above_20dma": result.context.spy_above_20dma,
+        "nasdaq_above_20dma": result.context.nasdaq_above_20dma,
+        "vix": result.context.vix,
+        "vix_rising": result.context.vix_rising,
+        "volatility_source": result.context.volatility_source,
+        "volatility_risk_off": result.context.volatility_risk_off,
+        "distribution_days": result.context.distribution_days,
+        "breadth_score": result.context.breadth_score,
+        "growth_participation_score": result.context.growth_participation_score,
+        "stocks_scanned": result.context.stocks_scanned,
+        "spreads_evaluated": result.context.spreads_evaluated,
+    }
+
+
+def _recommendation_measurement_features(result: ScanResult, recommendation) -> dict[str, Any]:
+    stock = recommendation.stock
+    sector = recommendation.sector
+    spread = recommendation.spread
+    features = {
+        **_base_measurement_features(
+            result=result,
+            decision_type="recommendation",
+            decision_id="recommendation",
+            ticker=stock.ticker,
+            sector=sector.name,
+            score=recommendation.score.total,
+        ),
         "score_total": recommendation.score.total,
         "score_bucket": _score_bucket(recommendation.score.total),
-        "market_score_raw": result.market_score,
         "score_breakdown": asdict(recommendation.score),
         "stock_setup_score": round(recommendation.score.trend + recommendation.score.confirmation, 2),
-        "market": {
-            "spy_above_20dma": result.context.spy_above_20dma,
-            "nasdaq_above_20dma": result.context.nasdaq_above_20dma,
-            "vix": result.context.vix,
-            "vix_rising": result.context.vix_rising,
-            "volatility_source": result.context.volatility_source,
-            "volatility_risk_off": result.context.volatility_risk_off,
-            "distribution_days": result.context.distribution_days,
-            "breadth_score": result.context.breadth_score,
-            "growth_participation_score": result.context.growth_participation_score,
-        },
         "sector": {
             "name": sector.name,
             "primary_etf": sector.primary_etf,
@@ -150,6 +189,19 @@ def _measurement_features(result: ScanResult, recommendation) -> dict[str, Any]:
             "volume_score": spread.volume_score,
         },
     }
+    return features
+
+
+def _rejection_measurement_features(result: ScanResult, rejection) -> dict[str, Any]:
+    return _base_measurement_features(
+        result=result,
+        decision_type="rejection",
+        decision_id="rejection",
+        ticker=rejection.ticker,
+        sector=rejection.sector,
+        stage=rejection.stage.value,
+        score=rejection.score,
+    )
 
 
 def _score_payload(score) -> dict[str, Any]:

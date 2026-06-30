@@ -29,6 +29,11 @@ def test_write_decision_packets_creates_recommendation_and_rejection_files(tmp_p
     features = recommendation["measurement_features"]
     assert features["hypothesis_id"] == "H-006"
     assert features["measurement_only"] is True
+    assert features["decision_type"] == "recommendation"
+    assert features["recommended"] is True
+    assert features["rejected"] is False
+    assert features["sit_out"] is False
+    assert features["action"] == "BUY"
     assert features["score_total"] == recommendation["score"]["total"]
     assert features["score_bucket"] == "90+"
     assert features["market_score_raw"] == recommendation["scan"]["market_score"]
@@ -53,7 +58,44 @@ def test_rejection_packet_includes_stage_reasons_and_optional_spread_shape(tmp_p
     assert rejection["long_call"] == 435
     assert rejection["short_call"] == 440
     assert rejection["reasons"]
-    assert "measurement_features" not in rejection
+    features = rejection["measurement_features"]
+    assert features["hypothesis_id"] == "H-006"
+    assert features["decision_type"] == "rejection"
+    assert features["recommended"] is False
+    assert features["rejected"] is True
+    assert features["sit_out"] is False
+    assert features["action"] == "BUY"
+    assert features["stage"] == "options"
+    assert features["ticker"] == "ISRG"
+    assert features["score_observed"] == rejection["score"]
+
+
+def test_market_sit_out_rejection_packet_records_skipped_environment(tmp_path):
+    class MarketBlockedProvider(MockDataProvider):
+        def get_market_snapshot(self, as_of):
+            snapshot = super().get_market_snapshot(as_of)
+            return type(snapshot)(
+                **{
+                    **snapshot.__dict__,
+                    "spy_above_20dma": False,
+                }
+            )
+
+    result = DailyScanner(load_config(), MarketBlockedProvider()).run("balanced", date(2026, 6, 26))
+    paths = write_decision_packets(result, tmp_path)
+    rejection = json.loads(paths[0].read_text(encoding="utf-8"))
+    features = rejection["measurement_features"]
+
+    assert rejection["decision_type"] == "rejection"
+    assert rejection["stage"] == "market"
+    assert features["decision_type"] == "rejection"
+    assert features["recommended"] is False
+    assert features["rejected"] is True
+    assert features["sit_out"] is True
+    assert features["action"] == "SIT TODAY OUT"
+    assert features["stage"] == "market"
+    assert features["market"]["stocks_scanned"] == 0
+    assert features["market"]["spreads_evaluated"] == 0
 
 
 def test_repeated_scan_does_not_overwrite_reviewed_packet(tmp_path):
