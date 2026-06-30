@@ -48,6 +48,8 @@ The daily report writes:
 - Decision packets under `data/journal/decision_packets/`.
 - Prospective signal-ranking snapshots under `data/journal/signal_rankings/`.
 - Daily reports under `data/reports/daily/`.
+- Durable milestone summaries under `research/prospective_validation.md`.
+- A simple forward evidence log under `research/prospective_validation_log.csv`.
 
 When the market gate passes, verify that the new signal-ranking snapshot contains:
 
@@ -60,6 +62,8 @@ When the market gate passes, verify that the new signal-ranking snapshot contain
 Never rewrite or replace older signal-ranking snapshots.
 
 Recommendation decision packets also record H-006 measurement-only pre-entry features. These features support future calibration analysis and must not change the current v4.2 trading decision.
+
+The prospective validation log should keep future outcome columns blank until their horizons mature. This preserves what was known at decision time.
 
 ## Weekly Review
 
