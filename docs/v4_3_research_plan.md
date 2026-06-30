@@ -88,7 +88,9 @@ failure:
 
 Test question:
 
-Does a higher-beta mean-reversion profile improve semiconductor outcomes without harming total portfolio expectancy, drawdown, or trade count?
+Decision:
+
+`EXP-2026-001` rejected this exact profile. It increased trade count but reduced overall expectancy, worsened drawdown, and made semiconductor performance worse. Do not promote this profile.
 
 ### H-006: Cloud / SaaS Is a Canary Sector
 

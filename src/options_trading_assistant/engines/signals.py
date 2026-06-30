@@ -89,7 +89,7 @@ class SignalEngine:
         signals: list[SignalCandidate] = []
         rankings: list[RankedStockSignal] = []
         stocks_scanned = 0
-        required_confirmations = mode_config["confirmation_signals_required"]
+        default_required_confirmations = mode_config["confirmation_signals_required"]
 
         for rank, (sector, sector_score_value) in enumerate(ranked_sectors, start=1):
             sector_eligible = rank <= mode_config["max_sectors"]
@@ -108,6 +108,11 @@ class SignalEngine:
             for stock in self.provider.get_stocks_for_sector(sector.name, as_of):
                 if sector_eligible:
                     stocks_scanned += 1
+                profile = sector_profile(self.config.strategy, stock.sector)
+                required_confirmations = required_confirmations_for_profile(
+                    default_required_confirmations,
+                    profile,
+                )
                 trend_score = score_trend(stock)
                 confirmation_score = score_confirmation(stock, required_confirmations)
                 signal = SignalCandidate(
@@ -134,6 +139,8 @@ class SignalEngine:
                         confirmation_score=confirmation_score,
                         required_confirmations=required_confirmations,
                         strategy_config=self.config.strategy,
+                        sector_profile=profile,
+                        market=context,
                     )
                 qualified = sector_eligible and rejection is None
                 rankings.append(
@@ -181,12 +188,24 @@ def stock_rejection(
     confirmation_score: float,
     required_confirmations: int,
     strategy_config: dict,
+    sector_profile: dict | None = None,
+    market: ScanContext | None = None,
 ) -> RejectedCandidate | None:
     reasons: list[str] = []
     stage = RejectionStage.MEAN_REVERSION
     trend_config = strategy_config["trend"]
-    mean_reversion_config = strategy_config["mean_reversion"]
+    mean_reversion_config = mean_reversion_for_profile(
+        strategy_config["mean_reversion"],
+        sector_profile,
+    )
     confirmation_config = strategy_config["confirmation"]
+
+    profile_max_vix = (sector_profile or {}).get("max_vix")
+    if profile_max_vix is not None and market is not None and (market.vix or 0.0) > float(profile_max_vix):
+        stage = RejectionStage.MARKET
+        reasons.append(
+            f"{stock.sector} profile max VIX {float(profile_max_vix):g} exceeded."
+        )
 
     if trend_score < trend_config["minimum_score"]:
         stage = RejectionStage.TREND
@@ -244,6 +263,25 @@ def stock_rejection(
         score=trend_score + confirmation_score,
         reasons=tuple(reasons),
     )
+
+
+def sector_profile(strategy_config: dict, sector_name: str) -> dict:
+    return dict((strategy_config.get("sector_profiles") or {}).get(sector_name, {}))
+
+
+def required_confirmations_for_profile(default_required: int, profile: dict | None) -> int:
+    if profile and profile.get("confirmation_required") is not None:
+        return int(profile["confirmation_required"])
+    return default_required
+
+
+def mean_reversion_for_profile(mean_reversion_config: dict, profile: dict | None) -> dict:
+    resolved = dict(mean_reversion_config)
+    if profile and profile.get("pullback_range"):
+        lower, upper = profile["pullback_range"]
+        resolved["min_pullback_pct"] = float(lower)
+        resolved["max_pullback_pct"] = float(upper)
+    return resolved
 
 
 def base_context(market) -> ScanContext:

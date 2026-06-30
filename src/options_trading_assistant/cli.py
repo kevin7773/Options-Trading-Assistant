@@ -142,7 +142,11 @@ def parse_args() -> argparse.Namespace:
     backtest.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
     backtest.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
     backtest.add_argument("--run-id", default=None, help="Optional stable output folder name.")
-    backtest.add_argument("--scenario", default="balanced", help="Backtest scenario: balanced, high_probability, aggressive.")
+    backtest.add_argument(
+        "--scenario",
+        default="balanced",
+        help="Backtest scenario: balanced, high_probability, aggressive, semiconductor_high_beta_recovery.",
+    )
     backtest.add_argument(
         "--summary-only",
         action="store_true",

@@ -57,7 +57,7 @@ Material tests should also create an experiment manifest under `research/experim
 | H-002 | ATM or slightly ITM call spreads improve mean-reversion construction versus OTM debit spreads. | Accepted | v4.0 | Multi-year backtest and lifecycle diagnostics. | Production: use mean-reversion recovery construction. |
 | H-003 | Reachability guard reduces false positives by requiring the long strike to be reachable within expected move. | Accepted | v4.1 | Backtest comparison and v4.2 frozen construction. | Production: keep reachability guard. |
 | H-004 | High-probability mode improves overall performance versus balanced mode. | Rejected | v4.2 | Higher drawdown and fewer trades despite slightly higher expectancy. | Stay on balanced; keep high-probability research-only unless new evidence appears. |
-| H-005 | Semiconductors require a high-beta recovery profile. | Active | v4.2 | v4.3 research branch; balanced and high-probability runs both showed weak semiconductor results. | Pending: test sector-specific profile before changing production. |
+| H-005 | Semiconductors require the tested high-beta recovery profile. | Rejected | v4.2 | `EXP-2026-001`: expectancy declined, drawdown worsened, and semiconductor losses increased. | Do not promote this profile; open a new hypothesis for any different semiconductor treatment. |
 | H-006 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
 | H-007 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
 
@@ -65,6 +65,7 @@ Material tests should also create an experiment manifest under `research/experim
 
 ```yaml
 hypothesis_id: H-005
+status: rejected
 
 success:
   semiconductor_expectancy_gt_baseline: true
@@ -78,6 +79,14 @@ failure:
   overall_drawdown_increases_materially: true
   trade_count_drops_below_minimum_threshold: true
   semiconductor_results_do_not_improve: true
+
+decision:
+  status: rejected
+  experiment: EXP-2026-001
+  rationale: >
+    Overall expectancy declined from 61.64 to 44.98, maximum drawdown worsened
+    from -362.57 to -528.82, and semiconductor total P/L worsened from -203.29
+    to -590.62.
 ```
 
 ## Candidate v4.3 Research Hypotheses
@@ -86,7 +95,7 @@ These ideas are explicitly research-only. They must not modify v4.2 prospective 
 
 | ID | Hypothesis | Test Shape | Promotion Concern |
 |---|---|---|---|
-| H-008 | Semiconductors improve under a `mean_reversion_high_beta` profile with stronger confirmation, lower volatility tolerance, ATM strikes, and deeper pullback range. | Compare semiconductor-only and portfolio-level performance against v4.2. | Must improve semiconductors without hurting total drawdown or concentrating edge. |
+| H-008 | A different semiconductor treatment may improve results after H-005 failed. | Declare a new profile before testing; do not reuse the failed H-005 assumptions. | Must explain why it should avoid the H-005 failure mode. |
 | H-009 | Expected-move-based strike selection improves spread construction durability. | Compare fixed moneyness versus expected-move-derived long strike placement. | Must improve expectancy without reducing trade count below promotion gate. |
 | H-010 | Sector-collapse exits reduce losses after the original sector thesis fails. | Compare lifecycle outcomes with and without stricter post-entry sector deterioration exits. | Must reduce drawdown without cutting winners too early. |
 | H-011 | Improved synthetic option pricing changes trade selection quality. | Replace v1 pricing assumptions with calibrated IV/expected-move/debit estimates and compare identical signals. | Must separate pricing improvement from strategy-rule changes. |

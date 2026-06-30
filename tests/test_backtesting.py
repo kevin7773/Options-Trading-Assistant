@@ -4,8 +4,9 @@ from options_trading_assistant.backtesting.diagnostics import (
     build_stock_diagnostics_report,
     format_stock_diagnostics_report,
 )
-from options_trading_assistant.backtesting.engine import run_backtest, simulate_spread_outcome
+from options_trading_assistant.backtesting.engine import run_backtest, scenario_config, simulate_spread_outcome
 from options_trading_assistant.backtesting.models import OHLCVBar
+from options_trading_assistant.backtesting.scenarios import get_scenario
 from options_trading_assistant.config import load_config
 from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.models import MarketSnapshot, OptionSpread, SectorSnapshot, StockSnapshot
@@ -177,3 +178,16 @@ def test_backtest_does_not_use_entry_day_high_for_profit_target():
 
     assert trade.profit_target_touched is False
     assert trade.highest_underlying_price == 100
+
+
+def test_h005_scenario_adds_semiconductor_sector_profile_only():
+    config = scenario_config(load_config(), get_scenario("semiconductor_high_beta_recovery"))
+
+    profile = config.strategy["sector_profiles"]["Semiconductors"]
+
+    assert profile["strategy_profile"] == "mean_reversion_high_beta"
+    assert profile["confirmation_required"] == 3
+    assert profile["max_vix"] == 18
+    assert profile["preferred_long_strike"] == "atm"
+    assert profile["pullback_range"] == [7, 15]
+    assert "Cloud / SaaS" not in config.strategy["sector_profiles"]

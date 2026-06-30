@@ -257,8 +257,10 @@ class HistoricalDataProvider(DataProvider):
         iv_proxy = estimate_iv_proxy_from_expected_move(expected_move_pct)
         spreads: list[OptionSpread] = []
         trade_config = trade_config_for_symbol(self.config, ticker)
+        sector_profile = _sector_profile_for_ticker(self.config, ticker)
+        long_moneyness = _long_strike_moneyness(self.scenario, sector_profile)
         for width in trade_config["preferred_spread_widths"]:
-            long_call = _round_strike(bar.close * (1 + self.scenario.long_strike_moneyness_pct), width)
+            long_call = _round_strike(bar.close * (1 + long_moneyness), width)
             short_call = long_call + width
             estimate = estimate_bull_call_spread_debit(
                 underlying_price=bar.close,
@@ -526,3 +528,22 @@ def _next_expiration(as_of: date, min_days: int) -> date:
 def _round_strike(value: float, width: float) -> float:
     increment = 5 if value >= 100 else max(width, 1)
     return round(value / increment) * increment
+
+
+def _sector_profile_for_ticker(config: AppConfig, ticker: str) -> dict:
+    symbol = ticker.upper()
+    for sector_name, sector_config in config.universe["sectors"].items():
+        if symbol in {item.upper() for item in sector_config.get("tickers", [])}:
+            return dict((config.strategy.get("sector_profiles") or {}).get(sector_name, {}))
+    return {}
+
+
+def _long_strike_moneyness(scenario: BacktestScenario, sector_profile: dict) -> float:
+    preference = str(sector_profile.get("preferred_long_strike") or "").lower()
+    if preference == "atm":
+        return 0.0
+    if preference in {"slightly_itm", "itm"}:
+        return -0.01
+    if preference in {"slightly_otm", "otm"}:
+        return 0.01
+    return scenario.long_strike_moneyness_pct

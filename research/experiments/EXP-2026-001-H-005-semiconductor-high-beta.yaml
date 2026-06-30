@@ -1,14 +1,14 @@
 experiment_id: EXP-2026-001
 strategy: v4.3
 baseline: v4.2
-status: planned
+status: completed
 
 hypotheses:
   - H-005
 
 name: semiconductor_high_beta_recovery
-date_started:
-date_completed:
+date_started: 2026-06-30
+date_completed: 2026-06-30
 
 owner: Options Trading Assistant
 
@@ -52,26 +52,97 @@ profile:
   pullback_range: [7, 15]
 
 artifacts:
-  backtest_runs: []
+  backtest_runs:
+    - backtesting/results/EXP-2026-001-H-005-semiconductor-high-beta-2024-2026ytd
   validation_reports: []
   decision_packets: []
   lifecycle_reports: []
 
 results:
-  expectancy:
-  drawdown:
-  win_rate:
-  trade_count:
-  average_win:
-  average_loss:
+  expectancy: 44.98
+  drawdown: -528.82
+  win_rate: 0.519
+  trade_count: 52
+  average_win: 145.24
+  average_loss: -63.30
   semiconductor:
-    trades:
-    win_rate:
-    total_pl:
-    expectancy:
+    trades: 14
+    win_rate: 0.143
+    total_pl: -590.62
+    expectancy: -42.19
     drawdown:
-  sector_results: {}
-  score_bucket_results: {}
+  sector_results:
+    Aerospace & Defense:
+      trades: 1
+      win_rate: 0.0
+      total_pl: -83.31
+      average_pl: -83.31
+    Cloud / SaaS:
+      trades: 6
+      win_rate: 1.0
+      total_pl: 907.20
+      average_pl: 151.20
+    Communication Services:
+      trades: 8
+      win_rate: 0.5
+      total_pl: 367.91
+      average_pl: 45.99
+    Consumer Discretionary:
+      trades: 4
+      win_rate: 0.5
+      total_pl: 174.79
+      average_pl: 43.70
+    Cybersecurity:
+      trades: 2
+      win_rate: 1.0
+      total_pl: 282.00
+      average_pl: 141.00
+    Energy:
+      trades: 2
+      win_rate: 1.0
+      total_pl: 294.00
+      average_pl: 147.00
+    Financials:
+      trades: 6
+      win_rate: 0.5
+      total_pl: 218.69
+      average_pl: 36.45
+    Healthcare:
+      trades: 4
+      win_rate: 0.5
+      total_pl: 199.50
+      average_pl: 49.88
+    Real Estate:
+      trades: 1
+      win_rate: 1.0
+      total_pl: 199.20
+      average_pl: 199.20
+    Semiconductors:
+      trades: 14
+      win_rate: 0.143
+      total_pl: -590.62
+      average_pl: -42.19
+    Technology:
+      trades: 2
+      win_rate: 0.5
+      total_pl: 56.64
+      average_pl: 28.32
+    Utilities:
+      trades: 2
+      win_rate: 1.0
+      total_pl: 313.20
+      average_pl: 156.60
+  score_bucket_results:
+    80-89:
+      trades: 26
+      win_rate: 0.654
+      total_pl: 2072.45
+      average_pl: 79.71
+    90+:
+      trades: 26
+      win_rate: 0.385
+      total_pl: 266.75
+      average_pl: 10.26
 
 success_criteria:
   semiconductor_expectancy_gt_baseline: true
@@ -87,6 +158,12 @@ failure_criteria:
   semiconductor_results_do_not_improve: true
 
 decision:
-  status: pending
-  rationale:
-  decided_at:
+  status: rejected
+  rationale: >
+    The H-005 high-beta semiconductor profile failed its stop conditions.
+    Overall expectancy declined from 61.64 to 44.98, maximum drawdown worsened
+    from -362.57 to -528.82, and semiconductor performance deteriorated from
+    8 trades at -203.29 total P/L to 14 trades at -590.62 total P/L.
+    Trade count remained above the minimum threshold, but the profile did not
+    improve semiconductor results and degraded the total strategy.
+  decided_at: 2026-06-30

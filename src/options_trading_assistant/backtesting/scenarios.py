@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class BacktestScenario:
     synthetic_max_debit_pct: float
     profit_target_pct_of_max_profit: float
     stop_loss_pct_of_debit: float
+    sector_profiles: dict[str, dict] = field(default_factory=dict)
 
 
 BALANCED_SCENARIO = BacktestScenario(
@@ -88,6 +89,20 @@ SCENARIOS = {
         synthetic_max_debit_pct=0.35,
         profit_target_pct_of_max_profit=0.60,
         stop_loss_pct_of_debit=0.60,
+    ),
+    "semiconductor_high_beta_recovery": replace(
+        BALANCED_SCENARIO,
+        name="semiconductor_high_beta_recovery",
+        description="H-005 research-only semiconductor high-beta recovery profile.",
+        sector_profiles={
+            "Semiconductors": {
+                "strategy_profile": "mean_reversion_high_beta",
+                "confirmation_required": 3,
+                "max_vix": 18,
+                "preferred_long_strike": "atm",
+                "pullback_range": [7, 15],
+            }
+        },
     ),
 }
 

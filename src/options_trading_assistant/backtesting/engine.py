@@ -222,6 +222,8 @@ def scenario_config(config: AppConfig, scenario: BacktestScenario) -> AppConfig:
     strategy["trade"]["max_iv_rank"] = scenario.max_iv_rank
     strategy["trade"]["min_debit_pct_of_width"] = scenario.min_debit_pct
     strategy["trade"]["max_debit_pct_of_width"] = scenario.max_debit_pct
+    if scenario.sector_profiles:
+        strategy["sector_profiles"] = deepcopy(scenario.sector_profiles)
     strategy["default_mode"] = mode_name
     return AppConfig(strategy=strategy, scoring=config.scoring, universe=config.universe, broker=config.broker)
 
