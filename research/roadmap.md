@@ -1,5 +1,30 @@
 # Research Roadmap
 
+## Project Phases
+
+- Foundation: v1 through v3 built the core scanner, provider abstractions, reports, and safety-first workflow.
+- Strategy: v4.0 through v4.2 froze the mean-reversion recovery philosophy, ATM / ITM construction, reachability guard, and v4.2 baseline.
+- Research: v4.3 established hypothesis governance, experiment manifests, notebook-based measurement, and universe lifecycle metadata.
+- Validation: the current phase collects prospective evidence without changing production behavior.
+- Optimization: future phase only after enough forward evidence exists to justify rule changes.
+
+## Next Full-Cycle Milestone
+
+The next major milestone is the first prospective paper trade that reaches a 21-day outcome.
+
+That will be the first complete research cycle tying together:
+
+- Frozen strategy.
+- Prospective recommendation.
+- Paper execution.
+- Matured outcome.
+- H-006 measurements.
+- Provenance metadata.
+- Dashboard visibility.
+- Research log.
+
+Until that loop completes, the priority is evidence quality over strategy change.
+
 ## July 2026
 
 - Collect prospective v4.2 evidence.

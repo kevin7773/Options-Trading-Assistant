@@ -59,6 +59,7 @@ Material tests should also create an experiment manifest under `research/experim
 | H-004 | High-probability mode improves overall performance versus balanced mode. | Rejected | v4.2 | Higher drawdown and fewer trades despite slightly higher expectancy. | Stay on balanced; keep high-probability research-only unless new evidence appears. |
 | H-005 | Semiconductors require the tested high-beta recovery profile. | Rejected | v4.2 | `EXP-2026-001`: expectancy declined, drawdown worsened, and semiconductor losses increased. | Do not promote this profile; open a new hypothesis for any different semiconductor treatment. |
 | H-006 | Pre-entry scores, rejection context, and skipped environments can predict future trade quality. | Active | v4.2 | Prospective decision packets now record measurement-only features before outcomes are known. | Collect data only; compare recommendations, near-misses, and sit-out environments before changing rules. |
+| H-007 | Mean-reversion recovery may exhibit higher expectancy within precious-metal equities. | Proposed | v4.2 | Observation only: Gold and precious-metal equities materially outperformed during the research period. | Do not implement; first run a measurement-only gold-slice review to determine whether better mean-reversion opportunities existed. |
 | H-012 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
 | H-013 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
 
@@ -160,6 +161,49 @@ future_questions:
   - Does IV rank or expected move identify fragile entries?
   - Do rejected near-misses outperform completed recommendations?
   - Do sit-out days avoid worse forward market environments?
+```
+
+## H-007 Measurement Plan
+
+H-007 is proposed, not active. It must not change scanner rules, sector ranking, trade construction, or v4.2 prospective tracking.
+
+```yaml
+hypothesis_id: H-007
+name: precious_metals_mean_reversion_opportunity
+status: proposed
+baseline: v4.2
+measurement_only: true
+
+observation: >
+  Gold and precious-metal equities materially outperformed the production
+  universe during the 2024 through 2026 YTD research period.
+
+hypothesis: >
+  Mean-reversion recovery may exhibit higher expectancy within precious-metal
+  equities.
+
+evidence:
+  current: observation_only
+  experiment: not_started
+  notebook: research/notebooks/gold_slice_review.ipynb
+
+first_question: >
+  Did Gold / Precious Metals produce better mean-reversion opportunities,
+  not merely better buy-and-hold performance?
+
+measurement_questions:
+  - How many configured 5-12% pullbacks occurred?
+  - How often were confirmation signals present?
+  - How often would reachability have passed?
+  - What were the average ATR and expected-move profiles?
+  - What was the RSI distribution during pullbacks?
+  - How many hypothetical candidates would have existed?
+  - How do those measurements compare with Cloud / SaaS, Semiconductors, Healthcare, and Financials?
+
+promotion_blockers:
+  - No rule changes before a completed measurement study.
+  - No promotion from price outperformance alone.
+  - No production scan eligibility without a research hypothesis, experiment manifest, and promotion gate.
 ```
 
 ## Candidate v4.3 Research Hypotheses

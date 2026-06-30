@@ -47,6 +47,7 @@ def normalize_universe(universe: dict[str, Any]) -> dict[str, Any]:
     explicit_metadata = _explicit_symbol_metadata(universe.get("symbols", []))
     scan_tiers = set(_symbols(universe.get("scan_tiers", [])))
     normalized = dict(universe)
+    normalized["research_slices"] = _normalize_research_slices(universe.get("research_slices", {}))
     normalized_sectors: dict[str, Any] = {}
     symbol_metadata: dict[str, Any] = {}
     for sector_name, sector_config in sectors.items():
@@ -160,6 +161,25 @@ def _sector_defaults(sector_config: dict[str, Any], tier: str) -> dict[str, Any]
     tier_defaults = sector_config.get("tier_defaults", {})
     defaults.update(tier_defaults.get(tier, {}))
     return defaults
+
+
+def _normalize_research_slices(slices: dict[str, Any]) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for name, slice_config in (slices or {}).items():
+        config = dict(slice_config or {})
+        excluded = set(_symbols(config.get("excluded_symbols", [])))
+        tracked_symbols = [
+            symbol for symbol in _symbols(config.get("tracked_symbols", []))
+            if symbol not in excluded
+        ]
+        benchmark_etfs = _symbols(config.get("benchmark_etfs", []))
+        sector_etfs = _symbols(config.get("sector_etfs", []))
+        legacy_etfs = _symbols(config.get("etfs", []))
+        config["tracked_symbols"] = tracked_symbols
+        config["excluded_symbols"] = _symbols(config.get("excluded_symbols", []))
+        config["etfs"] = _dedupe([*legacy_etfs, *benchmark_etfs, *sector_etfs])
+        normalized[str(name)] = config
+    return normalized
 
 
 def _symbols(values: list[Any] | tuple[Any, ...]) -> list[str]:

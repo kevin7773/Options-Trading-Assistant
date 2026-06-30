@@ -49,6 +49,13 @@ def test_render_dashboard_html_includes_filters_and_report_data():
                 "path": "research/experiments/EXP-2026-001.yaml",
                 "content": "Decision: rejected\nExpectancy: $44.98",
             },
+            {
+                "type": "quality",
+                "date": "quality",
+                "label": "Data Quality · repository health",
+                "path": ".",
+                "content": "Symbols hydrated | 231 / 232",
+            },
         ]
     )
 
@@ -61,8 +68,10 @@ def test_render_dashboard_html_includes_filters_and_report_data():
     assert "Prospective evidence" in html
     assert "Universe" in html
     assert "Research experiments" in html
+    assert "Data quality" in html
     assert "tier_1_core_leaders" in html
     assert "EXP-2026-001" in html
+    assert "Symbols hydrated" in html
 
 
 def test_build_dashboard_writes_index_file(tmp_path):
@@ -80,6 +89,15 @@ def test_build_dashboard_includes_experiment_manifest():
     assert "EXP-2026-001" in html
     assert "Decision: rejected" in html
     assert "$-16.66 vs baseline" in html
+
+
+def test_build_dashboard_includes_data_quality_report():
+    path = build_dashboard()
+    html = path.read_text(encoding="utf-8")
+
+    assert "Data Quality · repository health" in html
+    assert "Missing configured symbols" in html
+    assert "Decision packets" in html
 
 
 def test_dashboard_escapes_script_terminators_in_embedded_report_json():

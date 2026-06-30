@@ -849,13 +849,16 @@ def run_universe_summary(args: argparse.Namespace) -> None:
 
 def format_universe_summary(universe: dict, show_symbols: bool = False) -> str:
     sectors = universe.get("sectors", {})
+    research_slices = universe.get("research_slices", {})
     scan_stocks: set[str] = set()
     research_stocks: set[str] = set()
     etfs: set[str] = {"SPY", "QQQ", "VIXY"}
+    research_slice_symbols: set[str] = set()
     lines = [
         "Universe Summary",
         f"- Version: {universe.get('version', 'legacy')}",
         f"- Scan tiers: {', '.join(universe.get('scan_tiers', ['legacy']))}",
+        f"- Lifecycle statuses: {', '.join(universe.get('lifecycle_statuses', {}).keys())}",
         f"- Sectors: {len(sectors)}",
     ]
     for sector_name, sector_config in sectors.items():
@@ -867,12 +870,50 @@ def format_universe_summary(universe: dict, show_symbols: bool = False) -> str:
         lines.append(
             f"- {sector_name}: scan={len(tickers)} research={len(research_tickers)} etfs={len(sector_config.get('etfs', []))}"
         )
+        research_history = sector_config.get("research_history") or {}
+        if research_history:
+            lines.append(
+                "  research history: "
+                f"hypotheses={', '.join(research_history.get('hypotheses', []) or ['none'])}; "
+                f"experiments={', '.join(research_history.get('experiments', []) or ['none'])}; "
+                f"prospective_observations={research_history.get('prospective_observations', 0)}"
+            )
         if show_symbols:
             lines.append(f"  scan symbols: {', '.join(tickers)}")
-    lines.insert(4, f"- Scan stocks: {len(scan_stocks)}")
-    lines.insert(5, f"- Research stocks: {len(research_stocks)}")
-    lines.insert(6, f"- ETFs / proxies: {len(etfs)}")
-    lines.insert(7, f"- Default hydrate symbols: {len(scan_stocks | etfs)}")
+    if research_slices:
+        lines.append("")
+        lines.append("Research slices")
+    for slice_name, slice_config in research_slices.items():
+        tracked_symbols = slice_config.get("tracked_symbols", [])
+        research_slice_symbols.update(tracked_symbols)
+        etfs.update(slice_config.get("etfs", []))
+        lines.append(
+            f"- {slice_name}: status={slice_config.get('status', 'research')} "
+            f"tracked={len(tracked_symbols)} etfs={len(slice_config.get('etfs', []))}"
+        )
+        promotion = slice_config.get("promotion_requirements") or {}
+        history = slice_config.get("research_history") or {}
+        if promotion:
+            lines.append(
+                "  promotion: "
+                f"minimum_completed_trades={promotion.get('minimum_completed_trades', 'n/a')}; "
+                f"minimum_expectancy={promotion.get('minimum_expectancy', 'n/a')}; "
+                f"max_drawdown={promotion.get('max_drawdown', 'n/a')}"
+            )
+        if history:
+            lines.append(
+                "  research history: "
+                f"hypotheses={', '.join(history.get('hypotheses', []) or ['none'])}; "
+                f"experiments={', '.join(history.get('experiments', []) or ['none'])}; "
+                f"prospective_observations={history.get('prospective_observations', 0)}"
+            )
+        if show_symbols:
+            lines.append(f"  tracked symbols: {', '.join(tracked_symbols)}")
+    lines.insert(5, f"- Scan stocks: {len(scan_stocks)}")
+    lines.insert(6, f"- Research stocks: {len(research_stocks)}")
+    lines.insert(7, f"- Research slice symbols: {len(research_slice_symbols)}")
+    lines.insert(8, f"- ETFs / proxies: {len(etfs)}")
+    lines.insert(9, f"- Default hydrate symbols: {len(scan_stocks | research_slice_symbols | etfs)}")
     return "\n".join(lines)
 
 

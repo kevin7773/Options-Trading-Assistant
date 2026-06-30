@@ -334,6 +334,9 @@ def historical_tickers(config: AppConfig, vix_proxy: str = "VIXY") -> list[str]:
     for sector in config.universe["sectors"].values():
         tickers.update(etf.upper() for etf in sector.get("etfs", []))
         tickers.update(ticker.upper() for ticker in sector.get("tickers", []))
+    for research_slice in config.universe.get("research_slices", {}).values():
+        tickers.update(etf.upper() for etf in research_slice.get("etfs", []))
+        tickers.update(ticker.upper() for ticker in research_slice.get("tracked_symbols", []))
     return sorted(tickers)
 
 

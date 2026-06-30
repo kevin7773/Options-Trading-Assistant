@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from options_trading_assistant.config import PROJECT_ROOT, load_config
+from options_trading_assistant.providers.historical import historical_tickers
 
 
 def build_dashboard(output_path: Path | None = None) -> Path:
@@ -43,6 +44,7 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
     signal_rankings_dir = PROJECT_ROOT / "data" / "journal" / "signal_rankings"
     prospective_doc = PROJECT_ROOT / "docs" / "prospective_tracking.md"
     experiment_dir = PROJECT_ROOT / "research" / "experiments"
+    items.append(_data_quality_item())
 
     for path in sorted(daily_dir.glob("*-daily-report.html")) if daily_dir.exists() else []:
         items.append(_report_item(path, "Daily HTML Report", "html"))
@@ -269,6 +271,7 @@ def render_dashboard_html(items: list[dict[str, Any]]) -> str:
         <option value="validation">Edge validation reports</option>
         <option value="prospective">Prospective evidence</option>
         <option value="experiment">Research experiments</option>
+        <option value="quality">Data quality</option>
         <option value="universe">Universe</option>
       </select>
 
@@ -491,13 +494,16 @@ def _experiment_manifest_item(path: Path) -> dict[str, Any]:
 def _universe_summary_item(path: Path) -> dict[str, Any]:
     config = load_config()
     sectors = config.universe.get("sectors", {})
+    research_slices = config.universe.get("research_slices", {})
     scan_stocks: set[str] = set()
     research_stocks: set[str] = set()
     etfs: set[str] = {"SPY", "QQQ", "VIXY"}
+    research_slice_symbols: set[str] = set()
     lines = [
         "Universe v2 Summary",
         f"Version: {config.universe.get('version', 'legacy')}",
         f"Scan tiers: {', '.join(config.universe.get('scan_tiers', ['legacy']))}",
+        f"Lifecycle statuses: {', '.join(config.universe.get('lifecycle_statuses', {}).keys())}",
         "",
         "Coverage",
     ]
@@ -511,11 +517,46 @@ def _universe_summary_item(path: Path) -> dict[str, Any]:
             f"- {sector_name}: scan={len(tickers)} research={len(research_tickers)} "
             f"etfs={len(sector_config.get('etfs', []))}"
         )
-    lines.insert(5, f"- Sectors: {len(sectors)}")
-    lines.insert(6, f"- Scan stocks: {len(scan_stocks)}")
-    lines.insert(7, f"- Research stocks: {len(research_stocks)}")
-    lines.insert(8, f"- ETFs / proxies: {len(etfs)}")
-    lines.insert(9, f"- Default hydrate symbols: {len(scan_stocks | etfs)}")
+        research_history = sector_config.get("research_history") or {}
+        if research_history:
+            lines.append(
+                "  research history: "
+                f"hypotheses={', '.join(research_history.get('hypotheses', []) or ['none'])}; "
+                f"experiments={', '.join(research_history.get('experiments', []) or ['none'])}; "
+                f"prospective_observations={research_history.get('prospective_observations', 0)}"
+            )
+    if research_slices:
+        lines.extend(["", "Research slices"])
+    for slice_name, slice_config in research_slices.items():
+        tracked_symbols = slice_config.get("tracked_symbols", [])
+        research_slice_symbols.update(tracked_symbols)
+        etfs.update(slice_config.get("etfs", []))
+        lines.append(
+            f"- {slice_name}: status={slice_config.get('status', 'research')} "
+            f"tracked={len(tracked_symbols)} etfs={len(slice_config.get('etfs', []))}"
+        )
+        promotion = slice_config.get("promotion_requirements") or {}
+        history = slice_config.get("research_history") or {}
+        if promotion:
+            lines.append(
+                "  promotion: "
+                f"minimum_completed_trades={promotion.get('minimum_completed_trades', 'n/a')}; "
+                f"minimum_expectancy={promotion.get('minimum_expectancy', 'n/a')}; "
+                f"max_drawdown={promotion.get('max_drawdown', 'n/a')}"
+            )
+        if history:
+            lines.append(
+                "  research history: "
+                f"hypotheses={', '.join(history.get('hypotheses', []) or ['none'])}; "
+                f"experiments={', '.join(history.get('experiments', []) or ['none'])}; "
+                f"prospective_observations={history.get('prospective_observations', 0)}"
+            )
+    lines.insert(6, f"- Sectors: {len(sectors)}")
+    lines.insert(7, f"- Scan stocks: {len(scan_stocks)}")
+    lines.insert(8, f"- Research stocks: {len(research_stocks)}")
+    lines.insert(9, f"- Research slice symbols: {len(research_slice_symbols)}")
+    lines.insert(10, f"- ETFs / proxies: {len(etfs)}")
+    lines.insert(11, f"- Default hydrate symbols: {len(scan_stocks | research_slice_symbols | etfs)}")
     return {
         "type": "universe",
         "date": "universe",
@@ -523,6 +564,99 @@ def _universe_summary_item(path: Path) -> dict[str, Any]:
         "path": str(path),
         "content": "\n".join(lines),
     }
+
+
+def _data_quality_item() -> dict[str, Any]:
+    config = load_config()
+    expected_symbols = set(historical_tickers(config))
+    cache_files = _historical_cache_files()
+    cached_symbols = {_symbol_from_cache_file(path) for path in cache_files}
+    cached_symbols.discard("")
+    missing = sorted(expected_symbols - cached_symbols)
+    extra = sorted(cached_symbols - expected_symbols)
+    malformed_packets = _malformed_json_files(PROJECT_ROOT / "data" / "journal" / "decision_packets")
+    malformed_experiments = _malformed_yaml_files(PROJECT_ROOT / "research" / "experiments")
+    malformed_notebooks = _malformed_json_files(PROJECT_ROOT / "research" / "notebooks", pattern="*.ipynb")
+    daily_reports = list((PROJECT_ROOT / "data" / "reports" / "daily").glob("*-daily-report.*"))
+    packet_files = list((PROJECT_ROOT / "data" / "journal" / "decision_packets").rglob("*.json"))
+    experiment_files = list((PROJECT_ROOT / "research" / "experiments").glob("*.yaml"))
+    notebook_files = list((PROJECT_ROOT / "research" / "notebooks").glob("*.ipynb"))
+    latest_cache_write = max((path.stat().st_mtime for path in cache_files), default=0)
+    latest_cache_text = (
+        datetime.fromtimestamp(latest_cache_write).isoformat(timespec="seconds")
+        if latest_cache_write
+        else "none"
+    )
+    coverage = len(expected_symbols & cached_symbols)
+    lines = [
+        "Data Quality Dashboard",
+        "",
+        "Category | Status",
+        "--- | ---",
+        f"Symbols hydrated | {coverage} / {len(expected_symbols)}",
+        f"Missing configured symbols | {', '.join(missing) if missing else 'none'}",
+        f"Unexpected cached symbols | {', '.join(extra) if extra else 'none'}",
+        f"Historical cache files | {len(cache_files)}",
+        f"Cache freshness | latest historical cache write {latest_cache_text}",
+        f"Decision packets | {_health_label(packet_files, malformed_packets)}",
+        f"Reports | {_count_label(daily_reports)}",
+        f"Notebook metadata | {_health_label(notebook_files, malformed_notebooks)}",
+        f"Experiment manifests | {_health_label(experiment_files, malformed_experiments)}",
+        "",
+        "Interpretation",
+        "- Treat missing configured symbols as data-quality issues before interpreting strategy results.",
+        "- Measurement-only research slices are included in hydration coverage but are not production scan sectors.",
+    ]
+    return {
+        "type": "quality",
+        "date": "quality",
+        "label": "Data Quality · repository health",
+        "path": str(PROJECT_ROOT),
+        "content": "\n".join(lines),
+    }
+
+
+def _historical_cache_files() -> list[Path]:
+    base = PROJECT_ROOT / "data" / "historical"
+    if not base.exists():
+        return []
+    return sorted(path for path in base.rglob("*.csv") if path.is_file())
+
+
+def _symbol_from_cache_file(path: Path) -> str:
+    return path.stem.split("_", 1)[0].upper()
+
+
+def _malformed_json_files(directory: Path, pattern: str = "*.json") -> list[Path]:
+    malformed: list[Path] = []
+    for path in sorted(directory.rglob(pattern)) if directory.exists() else []:
+        try:
+            json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError:
+            malformed.append(path)
+    return malformed
+
+
+def _malformed_yaml_files(directory: Path) -> list[Path]:
+    malformed: list[Path] = []
+    for path in sorted(directory.rglob("*.yaml")) if directory.exists() else []:
+        try:
+            yaml.safe_load(path.read_text(encoding="utf-8", errors="replace"))
+        except yaml.YAMLError:
+            malformed.append(path)
+    return malformed
+
+
+def _health_label(files: list[Path], malformed: list[Path]) -> str:
+    if not files:
+        return "no files found"
+    if malformed:
+        return f"{len(files) - len(malformed)} / {len(files)} healthy; malformed: {', '.join(path.name for path in malformed)}"
+    return f"healthy ({len(files)} files)"
+
+
+def _count_label(files: list[Path]) -> str:
+    return f"healthy ({len(files)} files)" if files else "no files found"
 
 
 def _format_backtest_summary(run_name: str, summary: dict[str, Any]) -> str:

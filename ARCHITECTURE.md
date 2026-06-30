@@ -31,6 +31,20 @@ A quiet scanner is a feature, not a bug.
 11. No trade is always an acceptable answer.
 12. Backtests evaluate strategy rules; they must not silently change those rules.
 
+## Research Principles
+
+These principles are off limits unless the project explicitly changes its constitution:
+
+1. Price outperformance alone is never sufficient evidence for production.
+2. Every production change must trace back to a documented hypothesis.
+3. Every hypothesis must have predefined promotion and rejection criteria.
+4. Rejected hypotheses remain institutional knowledge.
+5. Prospective evidence outweighs retrospective optimization.
+
+The current operating rule is to spend at least 80% of project effort learning from the engine and no more than 20% changing it. The framework, governance, data quality, and tests are mature enough that evidence collection is now the limiting factor.
+
+Optimization comes after validation, not before it.
+
 ## Pipeline
 
 The scanner pipeline runs in this order:

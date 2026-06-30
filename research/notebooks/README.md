@@ -18,6 +18,7 @@ Use notebooks to ask questions of the evidence collected by:
 - `score_bucket_analysis.ipynb`: Compare outcomes for score buckets such as `90+`, `80-89`, and `70-79`.
 - `feature_importance.ipynb`: Compare features such as distance to long strike, IV rank, expected move, RSI, confirmation score, and market score.
 - `semiconductor_review.ipynb`: Review rejected semiconductor hypotheses and search for structurally different explanations.
+- `gold_slice_review.ipynb`: Measurement-only review for H-007; compare precious-metal mean-reversion opportunities against production sectors before any rule change.
 
 ## Rules
 

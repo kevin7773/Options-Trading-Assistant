@@ -4,6 +4,12 @@ description: Research universe with scan tiers, symbol metadata, liquidity assum
 scan_tiers: [tier_1_core_leaders, tier_2_sector_leaders]
 research_tiers: [tier_1_core_leaders, tier_2_sector_leaders, tier_3_watchlist]
 
+lifecycle_statuses:
+  measurement_only: Observed and hydrated for evidence collection, but not eligible for production scan decisions.
+  candidate: Eligible for controlled research experiments after a hypothesis and promotion gate are defined.
+  production: Eligible for normal scan, ranking, and recommendation workflows.
+  deprecated: Retained for audit history, but excluded from new scans and research by default.
+
 tier_definitions:
   tier_1_core_leaders: Excellent options liquidity, tight spreads, institutional volume, and reliable technical behavior.
   tier_2_sector_leaders: Liquid sector representatives scanned when their sector is leading.
@@ -36,6 +42,30 @@ exclusions:
     exclude_meme_or_event_distorted_names: true
     exclude_chronic_wide_spreads: true
     exclude_low_open_interest: true
+
+research_slices:
+  Gold / Precious Metals:
+    status: measurement_only
+    description: Commodity-linked hedge universe for tracking gold, miners, silver, and precious-metals leadership without changing production scan behavior.
+    benchmark_etfs: [GLD, GDX]
+    sector_etfs: [IAU, GDXJ, SLV]
+    tracked_symbols: [NEM, AEM, GOLD, FNV, WPM, KGC, AGI, PAAS, FCX]
+    excluded_symbols: [NUGT, DUST, JNUG]
+    thesis_tags: [commodity_hedge, inflation_hedge, geopolitical_risk, dollar_sensitivity]
+    preferred_strategies: [mean_reversion_recovery]
+    promotion_requirements:
+      minimum_completed_trades: 25
+      minimum_expectancy: ">= baseline"
+      max_drawdown: "no material increase vs baseline"
+      research_hypothesis_required: true
+      experiment_manifest_required: true
+    research_history:
+      hypotheses: []
+      experiments: []
+      prospective_observations: 0
+    notes:
+      - Research-only slice for H-006-style measurement; do not include in daily scan ranking until promoted by evidence.
+      - Leveraged miner ETFs are excluded from normal scanning and research hydrates.
 
 symbols:
   - ticker: AVGO
@@ -125,6 +155,11 @@ sectors:
       tier_4_excluded: []
 
   Semiconductors:
+    lifecycle_status: production
+    research_history:
+      hypotheses: [H-005]
+      experiments: [EXP-2026-001]
+      prospective_observations: 0
     benchmark_etfs: [SMH, SOXX]
     sector_etfs: [XSD]
     tiers:
