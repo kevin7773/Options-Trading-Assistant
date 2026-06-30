@@ -153,8 +153,9 @@ Pricing changes must be tested separately from signal-rule changes.
 3. Run the same date range and universe as v4.2.
 4. Compare against v4.2 balanced and, when relevant, v4.2 high-probability.
 5. Record the result in `docs/strategy_registry.md`.
-6. Do not merge v4.3 evidence into v4.2 prospective tracking.
-7. Do not update the frozen v4.2 baseline manifest.
+6. Record the experiment in `research/experiments/`.
+7. Do not merge v4.3 evidence into v4.2 prospective tracking.
+8. Do not update the frozen v4.2 baseline manifest.
 
 ## First Experiment Order
 

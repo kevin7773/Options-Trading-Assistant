@@ -47,6 +47,8 @@ Every hypothesis should include:
 
 Rejected hypotheses are institutional knowledge. They should remain in the registry so the project does not revisit the same idea without new evidence.
 
+Material tests should also create an experiment manifest under `research/experiments/`. The manifest records datasets, artifacts, metrics, success criteria, failure criteria, and the final decision.
+
 ## Registry
 
 | ID | Hypothesis | Status | Baseline | Evidence | Decision |

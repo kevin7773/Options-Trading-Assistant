@@ -1,0 +1,92 @@
+experiment_id: EXP-2026-001
+strategy: v4.3
+baseline: v4.2
+status: planned
+
+hypotheses:
+  - H-005
+
+name: semiconductor_high_beta_recovery
+date_started:
+date_completed:
+
+owner: Options Trading Assistant
+
+datasets:
+  - name: 2023
+    start: 2023-01-01
+    end: 2023-12-31
+  - name: 2024
+    start: 2024-01-01
+    end: 2024-12-31
+  - name: 2025
+    start: 2025-01-01
+    end: 2025-12-31
+  - name: 2026_ytd
+    start: 2026-01-01
+    end: 2026-06-30
+
+inputs:
+  strategy_config: config/strategy.yaml
+  universe_config: config/universe_v2.yaml
+  baseline_manifest: validation/baselines/v4.2-manifest.json
+  cache_dir: data/historical
+
+baseline_results:
+  run_id: v4.2-universe-v2-balanced-2024-2026ytd
+  expectancy: 61.64
+  drawdown: -362.57
+  win_rate: 0.604
+  trade_count: 48
+  semiconductor:
+    trades: 8
+    win_rate: 0.25
+    total_pl: -203.29
+
+profile:
+  sector: Semiconductors
+  strategy_profile: mean_reversion_high_beta
+  confirmation_required: 3
+  max_vix: 18
+  preferred_long_strike: atm
+  pullback_range: [7, 15]
+
+artifacts:
+  backtest_runs: []
+  validation_reports: []
+  decision_packets: []
+  lifecycle_reports: []
+
+results:
+  expectancy:
+  drawdown:
+  win_rate:
+  trade_count:
+  average_win:
+  average_loss:
+  semiconductor:
+    trades:
+    win_rate:
+    total_pl:
+    expectancy:
+    drawdown:
+  sector_results: {}
+  score_bucket_results: {}
+
+success_criteria:
+  semiconductor_expectancy_gt_baseline: true
+  semiconductor_drawdown_lte_baseline: true
+  overall_strategy_expectancy_gte_baseline: true
+  overall_strategy_drawdown_lte_baseline: true
+  minimum_total_trades: 40
+
+failure_criteria:
+  overall_expectancy_declines: true
+  overall_drawdown_increases_materially: true
+  trade_count_drops_below_minimum_threshold: true
+  semiconductor_results_do_not_improve: true
+
+decision:
+  status: pending
+  rationale:
+  decided_at:

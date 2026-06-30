@@ -129,6 +129,7 @@ See `docs/edge_validation.md` for the frozen-baseline protocol and change-contro
 See `docs/prospective_tracking.md` for the after-close forward evidence collection and weekly review runbook.
 See `docs/strategy_registry.md` for the evidence-driven hypothesis registry and promotion gate.
 See `docs/v4_3_research_plan.md` for the research-only v4.3 experiment plan.
+See `research/experiments/` for experiment manifests that preserve the audit trail behind strategy decisions.
 
 Backtest outputs are written under `backtesting/results/<run-id>/` and include `summary.json`, `trades.jsonl`, `scan_results.jsonl`, and simulated decision packets. This is still read-only research infrastructure; it does not place live or paper orders.
 
