@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import asdict
 from datetime import date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +62,11 @@ def _base_packet(result: ScanResult) -> dict[str, Any]:
     return {
         "schema_version": "decision_packet_v1",
         "created_at": datetime.now().isoformat(timespec="seconds"),
+        "engine_commit": _git_revision("HEAD"),
+        "strategy_commit": _strategy_commit(result.strategy_version),
+        "strategy_version": result.strategy_version,
+        "research_branch": _git_revision("HEAD"),
+        "dashboard_version": _dashboard_version(),
         "scan": {
             "as_of": result.as_of,
             "mode": result.mode,
@@ -76,6 +83,42 @@ def _base_packet(result: ScanResult) -> dict[str, Any]:
             "final_pl": None,
         },
     }
+
+
+@lru_cache(maxsize=16)
+def _git_revision(ref: str) -> str | None:
+    return _git_output("rev-parse", "--short", ref)
+
+
+@lru_cache(maxsize=16)
+def _strategy_commit(strategy_version: str) -> str | None:
+    paths = [
+        "config/strategy.yaml",
+        "config/scoring.yaml",
+        "config/universe_v2.yaml",
+        f"validation/baselines/{strategy_version}-manifest.json",
+    ]
+    return _git_output("log", "-n", "1", "--format=%h", "--", *paths)
+
+
+def _dashboard_version() -> str:
+    return "research_dashboard_v1"
+
+
+def _git_output(*args: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = result.stdout.strip()
+    return value or None
 
 
 def _base_measurement_features(

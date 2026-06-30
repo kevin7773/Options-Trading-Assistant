@@ -102,6 +102,12 @@ baseline: v4.2
 measurement_only: true
 
 features_recorded:
+  provenance:
+    - engine_commit
+    - strategy_commit
+    - strategy_version
+    - research_branch
+    - dashboard_version
   decision_context:
     - decision_type
     - recommended

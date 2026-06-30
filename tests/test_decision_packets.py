@@ -21,6 +21,11 @@ def test_write_decision_packets_creates_recommendation_and_rejection_files(tmp_p
     recommendation = json.loads(recommendation_path.read_text(encoding="utf-8"))
 
     assert recommendation["schema_version"] == "decision_packet_v1"
+    assert recommendation["engine_commit"]
+    assert recommendation["strategy_commit"]
+    assert recommendation["strategy_version"] == "v4.2"
+    assert recommendation["research_branch"] == recommendation["engine_commit"]
+    assert recommendation["dashboard_version"] == "research_dashboard_v1"
     assert recommendation["decision_type"] == "recommendation"
     assert recommendation["ticker"] == "ISRG"
     assert recommendation["scan"]["mode"] == "balanced"
@@ -87,6 +92,10 @@ def test_market_sit_out_rejection_packet_records_skipped_environment(tmp_path):
     features = rejection["measurement_features"]
 
     assert rejection["decision_type"] == "rejection"
+    assert rejection["engine_commit"]
+    assert rejection["strategy_commit"]
+    assert rejection["strategy_version"] == "v4.2"
+    assert rejection["dashboard_version"] == "research_dashboard_v1"
     assert rejection["stage"] == "market"
     assert features["decision_type"] == "rejection"
     assert features["recommended"] is False
