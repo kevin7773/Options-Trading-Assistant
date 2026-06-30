@@ -1,6 +1,6 @@
 protocol_version: edge_validation_v1
-baseline_version: v4.1
-baseline_manifest: validation/baselines/v4.1-manifest.json
+baseline_version: v4.2
+baseline_manifest: validation/baselines/v4.2-manifest.json
 
 evidence:
   pass_eligible_kinds: [holdout, forward]

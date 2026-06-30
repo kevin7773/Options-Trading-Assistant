@@ -18,7 +18,7 @@ def test_signal_snapshot_saves_ranked_stocks_before_trade_construction(tmp_path)
     payload = json.loads(path.read_text(encoding="utf-8"))
 
     assert payload["market_passed"] is True
-    assert payload["strategy_version"] == "v4.1"
+    assert payload["strategy_version"] == "v4.2"
     assert payload["rankings"]
     assert payload["rankings"][0]["predicted_rank"] == 1
     assert "qualified_for_trade_construction" in payload["rankings"][0]

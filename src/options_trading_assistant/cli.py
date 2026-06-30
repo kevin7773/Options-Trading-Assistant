@@ -98,6 +98,9 @@ def parse_args() -> argparse.Namespace:
     scan_stocks.add_argument("--date", dest="as_of", default=None, help="Scan date in YYYY-MM-DD format.")
     scan_stocks.add_argument("--limit", type=int, default=20, help="Maximum number of stocks to show.")
 
+    universe_summary = subparsers.add_parser("universe-summary", help="Show configured universe sectors, tiers, and symbol counts.")
+    universe_summary.add_argument("--show-symbols", action="store_true", help="Print scan-eligible symbols for each sector.")
+
     review_journal = subparsers.add_parser("review-journal", help="Summarize logged scan recommendations and rejections.")
     review_journal.add_argument("--days", type=int, default=None, help="Only include scans from the last N days.")
     review_journal.add_argument("--ticker", default=None, help="Only include scans mentioning this ticker.")
@@ -835,6 +838,40 @@ def run_hydrate_history(args: argparse.Namespace) -> None:
     print(format_hydrate_summary(summary))
 
 
+def run_universe_summary(args: argparse.Namespace) -> None:
+    config = load_config()
+    print(format_universe_summary(config.universe, show_symbols=args.show_symbols))
+
+
+def format_universe_summary(universe: dict, show_symbols: bool = False) -> str:
+    sectors = universe.get("sectors", {})
+    scan_stocks: set[str] = set()
+    research_stocks: set[str] = set()
+    etfs: set[str] = {"SPY", "QQQ", "VIXY"}
+    lines = [
+        "Universe Summary",
+        f"- Version: {universe.get('version', 'legacy')}",
+        f"- Scan tiers: {', '.join(universe.get('scan_tiers', ['legacy']))}",
+        f"- Sectors: {len(sectors)}",
+    ]
+    for sector_name, sector_config in sectors.items():
+        tickers = sector_config.get("tickers", [])
+        research_tickers = sector_config.get("research_tickers", tickers)
+        scan_stocks.update(tickers)
+        research_stocks.update(research_tickers)
+        etfs.update(sector_config.get("etfs", []))
+        lines.append(
+            f"- {sector_name}: scan={len(tickers)} research={len(research_tickers)} etfs={len(sector_config.get('etfs', []))}"
+        )
+        if show_symbols:
+            lines.append(f"  scan symbols: {', '.join(tickers)}")
+    lines.insert(4, f"- Scan stocks: {len(scan_stocks)}")
+    lines.insert(5, f"- Research stocks: {len(research_stocks)}")
+    lines.insert(6, f"- ETFs / proxies: {len(etfs)}")
+    lines.insert(7, f"- Default hydrate symbols: {len(scan_stocks | etfs)}")
+    return "\n".join(lines)
+
+
 def run_backtest_stock_diagnostics(args: argparse.Namespace) -> None:
     config = load_config()
     mode = args.mode or config.strategy["default_mode"]
@@ -1080,6 +1117,8 @@ def main() -> None:
             run_sector_ranking(args)
         elif args.command == "scan-stocks":
             run_stock_scan(args)
+        elif args.command == "universe-summary":
+            run_universe_summary(args)
         elif args.command == "review-journal":
             run_journal_review(args)
         elif args.command == "list-packets":

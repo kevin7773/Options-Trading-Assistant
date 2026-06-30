@@ -1,5 +1,6 @@
 strategy_name: mean_reversion_bull_call_v4
-strategy_version: v4.1
+strategy_version: v4.2
+universe_file: universe_v2.yaml
 default_mode: balanced
 
 modes:

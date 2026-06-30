@@ -2,7 +2,7 @@
 
 The scanner is now a frozen hypothesis. Phase 2 asks whether it has measurable edge.
 
-Improving rules and validating rules are separate activities. Do not tune v4.1 while it is under validation. A changed rule becomes a new version with a new manifest and a new evidence record.
+Improving rules and validating rules are separate activities. Do not tune v4.2 while it is under validation. A changed rule becomes a new version with a new manifest and a new evidence record.
 
 ## Evidence Classes
 
@@ -68,7 +68,7 @@ Evaluate retrospective backtest evidence:
 ```powershell
 python -m options_trading_assistant.cli validate-edge `
   --source backtest `
-  --runs-root backtesting/results/v4.1-strike-durability `
+  --runs-root backtesting/results/v4.2-strike-durability `
   --scenario current_otm `
   --evidence-kind retrospective
 ```
@@ -79,7 +79,7 @@ Evaluate completed forward decision packets:
 python -m options_trading_assistant.cli validate-edge `
   --source packets `
   --packet-root data/journal/decision_packets `
-  --scenario v4.1-forward `
+  --scenario v4.2-forward `
   --evidence-kind forward
 ```
 
@@ -91,7 +91,7 @@ python -m options_trading_assistant.cli ranking-experiment `
   --end 2026-06-29 `
   --cache-dir data/historical/yahoo_2022_2026 `
   --mode balanced `
-  --output-dir backtesting/results/v4.1-ranking-edge
+  --output-dir backtesting/results/v4.2-ranking-edge
 ```
 
 ## Change Control

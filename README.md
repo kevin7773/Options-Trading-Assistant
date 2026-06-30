@@ -79,6 +79,14 @@ Build the local report dashboard:
 python -m options_trading_assistant.cli dashboard --serve
 ```
 
+Inspect the active tiered universe:
+
+```powershell
+python -m options_trading_assistant.cli universe-summary --show-symbols
+```
+
+`config/universe_v2.yaml` is a research asset, not only a ticker list. It defines Tier 1 core leaders, Tier 2 sector leaders, Tier 3 watchlist names, Tier 4 exclusions, benchmark ETFs, and symbol-level trading metadata such as preferred spread widths, minimum option open interest, strategy fit, and earnings buffers.
+
 Run a historical backtest from cached OHLCV files:
 
 ```powershell
@@ -108,7 +116,7 @@ python -m options_trading_assistant.cli backtest-stock-diagnostics --date 2025-0
 Evaluate frozen evidence against the Phase 2 edge-validation protocol:
 
 ```powershell
-python -m options_trading_assistant.cli validate-edge --source backtest --runs-root backtesting/results/v4.1-strike-durability --scenario current_otm --evidence-kind retrospective
+python -m options_trading_assistant.cli validate-edge --source backtest --runs-root backtesting/results/v4.2-strike-durability --scenario current_otm --evidence-kind retrospective
 ```
 
 Save every market-pass day's top ten stocks and evaluate their forward ranking performance:
@@ -118,6 +126,7 @@ python -m options_trading_assistant.cli ranking-experiment --start 2023-01-01 --
 ```
 
 See `docs/edge_validation.md` for the frozen-baseline protocol and change-control rules.
+See `docs/prospective_tracking.md` for the after-close forward evidence collection and weekly review runbook.
 
 Backtest outputs are written under `backtesting/results/<run-id>/` and include `summary.json`, `trades.jsonl`, `scan_results.jsonl`, and simulated decision packets. This is still read-only research infrastructure; it does not place live or paper orders.
 

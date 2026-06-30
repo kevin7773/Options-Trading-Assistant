@@ -7,7 +7,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from options_trading_assistant.config import PROJECT_ROOT
+from options_trading_assistant.config import PROJECT_ROOT, load_config
 
 
 def build_dashboard(output_path: Path | None = None) -> Path:
@@ -35,6 +35,11 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     daily_dir = PROJECT_ROOT / "data" / "reports" / "daily"
     packet_dir = PROJECT_ROOT / "data" / "journal" / "decision_packets"
+    backtest_dir = PROJECT_ROOT / "backtesting" / "results"
+    config_dir = PROJECT_ROOT / "config"
+    validation_reports_dir = PROJECT_ROOT / "data" / "reports" / "validation"
+    signal_rankings_dir = PROJECT_ROOT / "data" / "journal" / "signal_rankings"
+    prospective_doc = PROJECT_ROOT / "docs" / "prospective_tracking.md"
 
     for path in sorted(daily_dir.glob("*-daily-report.html")) if daily_dir.exists() else []:
         items.append(_report_item(path, "Daily HTML Report", "html"))
@@ -44,6 +49,32 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
 
     for path in sorted(packet_dir.rglob("*.json")) if packet_dir.exists() else []:
         items.append(_packet_item(path))
+
+    for path in sorted(backtest_dir.rglob("summary.json")) if backtest_dir.exists() else []:
+        items.append(_backtest_summary_item(path))
+
+    for path in sorted(backtest_dir.rglob("validation.md")) if backtest_dir.exists() else []:
+        items.append(_report_item(path, "Edge Validation Report", "validation"))
+
+    for path in sorted(backtest_dir.rglob("validation.json")) if backtest_dir.exists() else []:
+        items.append(_json_report_item(path, "Edge Validation Data", "validation"))
+
+    for path in sorted(validation_reports_dir.rglob("*.md")) if validation_reports_dir.exists() else []:
+        items.append(_report_item(path, "Prospective Validation Report", "prospective"))
+
+    for path in sorted(validation_reports_dir.rglob("*.json")) if validation_reports_dir.exists() else []:
+        items.append(_json_report_item(path, "Prospective Validation Data", "prospective"))
+
+    for path in sorted(signal_rankings_dir.rglob("*.json")) if signal_rankings_dir.exists() else []:
+        items.append(_signal_ranking_item(path))
+
+    if prospective_doc.exists():
+        items.append(_report_item(prospective_doc, "Prospective Tracking Runbook", "prospective"))
+
+    universe_path = config_dir / "universe_v2.yaml"
+    if universe_path.exists():
+        items.append(_universe_summary_item(universe_path))
+        items.append(_report_item(universe_path, "Universe v2 YAML", "universe"))
 
     return sorted(items, key=lambda item: (item["date"], item["label"]), reverse=True)
 
@@ -224,6 +255,10 @@ def render_dashboard_html(items: list[dict[str, Any]]) -> str:
         <option value="html">Daily HTML reports</option>
         <option value="markdown">Daily Markdown reports</option>
         <option value="packet">Decision packets</option>
+        <option value="backtest">Backtest / benchmark summaries</option>
+        <option value="validation">Edge validation reports</option>
+        <option value="prospective">Prospective evidence</option>
+        <option value="universe">Universe</option>
       </select>
 
       <label for="reportSelect">Report</label>
@@ -359,6 +394,152 @@ def _packet_item(path: Path) -> dict[str, Any]:
         "path": str(path),
         "content": json.dumps(packet, indent=2, sort_keys=True) if packet else content,
     }
+
+
+def _backtest_summary_item(path: Path) -> dict[str, Any]:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        summary = json.loads(content)
+    except json.JSONDecodeError:
+        summary = {}
+    run_dir = path.parent
+    run_name = run_dir.name
+    date_value = _date_from_run_name(run_name)
+    scenario = summary.get("scenario") or _run_part(run_name, 2) or "unknown"
+    strike_model = summary.get("strike_model") or _run_part(run_name, 3) or "unknown"
+    formatted = _format_backtest_summary(run_name, summary) if summary else content
+    return {
+        "type": "backtest",
+        "date": date_value,
+        "label": f"{date_value} · {scenario} · {strike_model} · {run_name}",
+        "path": str(path),
+        "content": formatted,
+    }
+
+
+def _json_report_item(path: Path, title: str, report_type: str) -> dict[str, Any]:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        payload = json.loads(content)
+        content = json.dumps(payload, indent=2, sort_keys=True)
+    except json.JSONDecodeError:
+        pass
+    return {
+        "type": report_type,
+        "date": _date_from_name(path),
+        "label": f"{_date_from_name(path)} · {title} · {path.parent.name}",
+        "path": str(path),
+        "content": content,
+    }
+
+
+def _signal_ranking_item(path: Path) -> dict[str, Any]:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        payload = {}
+    date_value = str(payload.get("as_of") or _date_from_parts(path))
+    mode = payload.get("mode", "unknown")
+    strategy_version = payload.get("strategy_version", "unknown")
+    top = payload.get("rankings", [])
+    top_ticker = top[0].get("ticker", "none") if top and isinstance(top[0], dict) else "none"
+    return {
+        "type": "prospective",
+        "date": date_value,
+        "label": f"{date_value} · signal ranking · {strategy_version} · {mode} · top {top_ticker}",
+        "path": str(path),
+        "content": json.dumps(payload, indent=2, sort_keys=True) if payload else content,
+    }
+
+
+def _universe_summary_item(path: Path) -> dict[str, Any]:
+    config = load_config()
+    sectors = config.universe.get("sectors", {})
+    scan_stocks: set[str] = set()
+    research_stocks: set[str] = set()
+    etfs: set[str] = {"SPY", "QQQ", "VIXY"}
+    lines = [
+        "Universe v2 Summary",
+        f"Version: {config.universe.get('version', 'legacy')}",
+        f"Scan tiers: {', '.join(config.universe.get('scan_tiers', ['legacy']))}",
+        "",
+        "Coverage",
+    ]
+    for sector_name, sector_config in sectors.items():
+        tickers = sector_config.get("tickers", [])
+        research_tickers = sector_config.get("research_tickers", tickers)
+        scan_stocks.update(tickers)
+        research_stocks.update(research_tickers)
+        etfs.update(sector_config.get("etfs", []))
+        lines.append(
+            f"- {sector_name}: scan={len(tickers)} research={len(research_tickers)} "
+            f"etfs={len(sector_config.get('etfs', []))}"
+        )
+    lines.insert(5, f"- Sectors: {len(sectors)}")
+    lines.insert(6, f"- Scan stocks: {len(scan_stocks)}")
+    lines.insert(7, f"- Research stocks: {len(research_stocks)}")
+    lines.insert(8, f"- ETFs / proxies: {len(etfs)}")
+    lines.insert(9, f"- Default hydrate symbols: {len(scan_stocks | etfs)}")
+    return {
+        "type": "universe",
+        "date": "universe",
+        "label": "Universe v2 · summary",
+        "path": str(path),
+        "content": "\n".join(lines),
+    }
+
+
+def _format_backtest_summary(run_name: str, summary: dict[str, Any]) -> str:
+    lines = [
+        f"Backtest Summary: {run_name}",
+        "",
+        f"Scenario: {summary.get('scenario', 'unknown')}",
+        f"Strike model: {summary.get('strike_model', 'unknown')}",
+        f"Scans: {summary.get('scan_count', 0)}",
+        f"Trades: {summary.get('trade_count', 0)}",
+        f"Sit-outs: {summary.get('sit_out_count', 0)}",
+        f"Win rate: {_pct(summary.get('win_rate', 0))}",
+        f"Average win: ${summary.get('average_win', 0):.2f}",
+        f"Average loss: ${summary.get('average_loss', 0):.2f}",
+        f"Expectancy: ${summary.get('expectancy', 0):.2f}",
+        f"Max drawdown: ${summary.get('max_drawdown', 0):.2f}",
+    ]
+    for title, key in (
+        ("Performance by sector", "performance_by_sector"),
+        ("Performance by market regime", "performance_by_market_regime"),
+        ("Performance by score bucket", "performance_by_score_bucket"),
+    ):
+        group = summary.get(key) or {}
+        lines.extend(["", title])
+        if not group:
+            lines.append("- none")
+        for name, metrics in group.items():
+            lines.append(
+                f"- {name}: trades={metrics.get('trades', 0)} "
+                f"win_rate={_pct(metrics.get('win_rate', 0))} "
+                f"total_pl=${metrics.get('total_pl', 0):.2f} "
+                f"avg_pl=${metrics.get('average_pl', 0):.2f}"
+            )
+    return "\n".join(lines)
+
+
+def _pct(value: Any) -> str:
+    try:
+        return f"{float(value):.1%}"
+    except (TypeError, ValueError):
+        return "0.0%"
+
+
+def _date_from_run_name(name: str) -> str:
+    if len(name) >= 8 and name[:8].isdigit():
+        return f"{name[:4]}-{name[4:6]}-{name[6:8]}"
+    return "backtest"
+
+
+def _run_part(name: str, index: int) -> str | None:
+    parts = name.split("-")
+    return parts[index] if len(parts) > index else None
 
 
 def _date_from_name(path: Path) -> str:

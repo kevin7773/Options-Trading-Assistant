@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from options_trading_assistant.config import AppConfig
+from options_trading_assistant.config import AppConfig, trade_config_for_symbol
 from options_trading_assistant.engines.scoring import (
     build_score_breakdown,
     grade_for_score,
@@ -63,9 +63,10 @@ class TradeConstructionEngine:
                 continue
 
             for spread in spreads:
+                trade_config = trade_config_for_symbol(self.config, spread.ticker)
                 options_score = score_options(
                     spread,
-                    self.config.strategy["trade"],
+                    trade_config,
                     signal_result.as_of,
                 )
                 score = build_score_breakdown(
@@ -152,7 +153,7 @@ class TradeConstructionEngine:
         )
 
     def rejection_reasons(self, spread: OptionSpread, as_of: date) -> tuple[str, ...]:
-        trade_config = self.config.strategy["trade"]
+        trade_config = trade_config_for_symbol(self.config, spread.ticker)
         reasons = list(self.hard_rejection_reasons(spread, as_of))
         dte = (spread.expiration - as_of).days
         if not (trade_config["min_days_to_expiration"] <= dte <= trade_config["max_days_to_expiration"]):
@@ -185,7 +186,7 @@ class TradeConstructionEngine:
         return tuple(reasons)
 
     def hard_rejection_reasons(self, spread: OptionSpread, as_of: date) -> tuple[str, ...]:
-        trade_config = self.config.strategy["trade"]
+        trade_config = trade_config_for_symbol(self.config, spread.ticker)
         reasons: list[str] = []
         if spread.debit <= 0:
             reasons.append("Debit is zero or negative.")
@@ -239,7 +240,8 @@ class TradeConstructionEngine:
 
     def risks(self, spread: OptionSpread) -> tuple[str, ...]:
         risks = []
-        if spread.iv_rank > self.config.strategy["trade"]["max_iv_rank"]:
+        trade_config = trade_config_for_symbol(self.config, spread.ticker)
+        if spread.iv_rank > trade_config["max_iv_rank"]:
             risks.append("Implied volatility is elevated versus the preferred range.")
         if spread.bid_ask_width_pct > 0.08:
             risks.append("Bid/ask width requires patient limit-order execution.")

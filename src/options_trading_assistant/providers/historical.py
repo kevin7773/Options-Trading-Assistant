@@ -19,7 +19,7 @@ from options_trading_assistant.backtesting.synthetic_options_model import (
     estimate_bull_call_spread_debit,
     estimate_iv_proxy_from_expected_move,
 )
-from options_trading_assistant.config import AppConfig, PROJECT_ROOT
+from options_trading_assistant.config import AppConfig, PROJECT_ROOT, trade_config_for_symbol
 from options_trading_assistant.models import MarketSnapshot, OptionSpread, SectorSnapshot, StockSnapshot
 from options_trading_assistant.providers.base import DataProvider
 
@@ -256,7 +256,8 @@ class HistoricalDataProvider(DataProvider):
         expected_move_pct = max(_average_true_range_pct(self._series_until(ticker.upper(), as_of), 14), 2.0)
         iv_proxy = estimate_iv_proxy_from_expected_move(expected_move_pct)
         spreads: list[OptionSpread] = []
-        for width in self.config.strategy["trade"]["preferred_spread_widths"]:
+        trade_config = trade_config_for_symbol(self.config, ticker)
+        for width in trade_config["preferred_spread_widths"]:
             long_call = _round_strike(bar.close * (1 + self.scenario.long_strike_moneyness_pct), width)
             short_call = long_call + width
             estimate = estimate_bull_call_spread_debit(

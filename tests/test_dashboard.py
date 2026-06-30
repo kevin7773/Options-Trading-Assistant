@@ -21,6 +21,27 @@ def test_render_dashboard_html_includes_filters_and_report_data():
                 "path": "data/journal/decision_packets/packet.json",
                 "content": '{"ticker": "MSFT"}',
             },
+            {
+                "type": "backtest",
+                "date": "backtest",
+                "label": "balanced · slightly_itm",
+                "path": "backtesting/results/run/summary.json",
+                "content": "Expectancy: $125.40",
+            },
+            {
+                "type": "universe",
+                "date": "universe",
+                "label": "Universe v2",
+                "path": "config/universe_v2.yaml",
+                "content": "tier_1_core_leaders",
+            },
+            {
+                "type": "prospective",
+                "date": "2026-06-30",
+                "label": "Prospective Tracking Runbook",
+                "path": "docs/prospective_tracking.md",
+                "content": "INSUFFICIENT EVIDENCE",
+            },
         ]
     )
 
@@ -29,6 +50,10 @@ def test_render_dashboard_html_includes_filters_and_report_data():
     assert "reportSelect" in html
     assert "Daily Trading Report" in html
     assert "MSFT" in html
+    assert "Backtest / benchmark summaries" in html
+    assert "Prospective evidence" in html
+    assert "Universe" in html
+    assert "tier_1_core_leaders" in html
 
 
 def test_build_dashboard_writes_index_file(tmp_path):

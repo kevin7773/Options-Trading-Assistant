@@ -208,12 +208,14 @@ Backtest artifacts / metrics / simulated decision packets
 Edge validation consumes frozen outputs without retuning either engine:
 
 ```text
-Frozen v4.1 baseline
+Frozen v4.2 baseline
     |
     +--> Signal ranking experiment -> forward stock returns
     |
     +--> Trade evidence -> independent setups -> costs / confidence / benchmarks
 ```
+
+Prospective tracking is governed by `docs/prospective_tracking.md`. Daily evidence collection and weekly review must treat snapshots, packets, and validation reports as immutable evidence, not as tuning prompts.
 
 ## Workbench Commands
 
@@ -257,6 +259,8 @@ Known historical provider details:
 Strategy thresholds, weights, universe definitions, and broker/provider settings belong in `config/*.yaml`.
 
 Avoid hard-coding values that represent strategy policy. If a number changes the trading behavior, it should probably be configurable.
+
+`config/universe_v2.yaml` is a versioned research asset, not only a ticker list. It should preserve why a ticker exists, how it should be treated, and when it should not be scanned. The active scanner uses Tier 1 core leaders and Tier 2 sector leaders by default; Tier 3 watchlist names remain available for research and promotion, while Tier 4 exclusions are retained as explicit no-scan metadata.
 
 ## Coding Conventions
 

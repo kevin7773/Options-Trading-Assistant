@@ -176,10 +176,13 @@ def simulate_spread_outcome(
     final_pl = final_value - spread.max_loss
     market_score_exit = score_market(provider.get_market_snapshot(exit_date), config.strategy["market"])
     sector_score_exit = _sector_score(provider, candidate.sector.name, exit_date)
+    strike_variant = getattr(provider, "strike_variant", None)
     return BacktestTrade(
         scenario=scenario.name,
+        strike_model=strike_variant.name if strike_variant else "unknown",
         entry_date=result.as_of,
         exit_date=exit_date,
+        exit_reason=exit_reason,
         ticker=candidate.stock.ticker,
         sector=candidate.sector.name,
         score=candidate.score.total,
@@ -200,6 +203,7 @@ def simulate_spread_outcome(
         lowest_underlying_price=round(low_price, 4),
         profit_target_touched=exit_reason == "profit_target" or high_value >= profit_target_value,
         stop_triggered_before_exit=exit_reason == "stop_loss",
+        sector_collapse_exit=exit_reason == "sector_collapse",
         market_score_entry=result.market_score,
         market_score_exit=market_score_exit,
         sector_score_entry=round(candidate.score.sector, 2),

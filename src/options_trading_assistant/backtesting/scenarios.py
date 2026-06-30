@@ -42,19 +42,19 @@ SCENARIOS = {
     "slightly_itm": replace(
         BALANCED_SCENARIO,
         name="slightly_itm",
-        description="Balanced v4.1 rules with the long strike placed 1% in the money.",
+        description="Balanced v4.2 rules with the long strike placed 1% in the money.",
         long_strike_moneyness_pct=-0.01,
     ),
     "atm": replace(
         BALANCED_SCENARIO,
         name="atm",
-        description="Balanced v4.1 rules with the long strike placed at the money.",
+        description="Balanced v4.2 rules with the long strike placed at the money.",
         long_strike_moneyness_pct=0.00,
     ),
     "current_otm": replace(
         BALANCED_SCENARIO,
         name="current_otm",
-        description="Balanced v4.1 rules with the current long strike placement 1% out of the money.",
+        description="Balanced v4.2 rules with the current long strike placement 1% out of the money.",
         long_strike_moneyness_pct=0.01,
     ),
     "high_probability": replace(

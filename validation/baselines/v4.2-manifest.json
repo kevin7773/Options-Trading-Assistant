@@ -1,0 +1,21 @@
+{
+  "files": {
+    "config/scoring.yaml": "a765d3d2bde2d690672680a865820e59162f4877f9f2dc481d7c57e2ef54e855",
+    "config/strategy.yaml": "8aa47b5ae474099a30f70ea01c8fa418e2b82d0fd8cae7fa1f56eca690ae14ee",
+    "config/universe_v2.yaml": "2773173c55f0148be29c6a6b72056feb49b9f88446ec1bf4ecbbe70e90c3ec01",
+    "config/validation.yaml": "78d36a42eb4dd40c1d7dc69924fdb987115ba141d2a189cdc28914992eaed3e2",
+    "src/options_trading_assistant/backtesting/engine.py": "2d169c2071078088123578a80563d7e5c6615ba250c756451e19840ccfe343cb",
+    "src/options_trading_assistant/backtesting/scenarios.py": "2c6e5273553170c6b2f5e99893634ff5245062ea5a9f4549844167e591065215",
+    "src/options_trading_assistant/backtesting/synthetic_options_model.py": "f52304c15a319024c89e4d481c67da2a6487c3bb82efe6b82a6b4da4fad01c57",
+    "src/options_trading_assistant/config.py": "de5873f174298761186ee3005f9a1e83f8b27ea35f49faea1577d50682da7f86",
+    "src/options_trading_assistant/engines/cooling_off.py": "1c998086d314167424c6b61b1af8ce52cfae3567c0090da6097e5c22bda472ac",
+    "src/options_trading_assistant/engines/scanner.py": "81ff617d602f28d287671bb4334f58ffd6f85a4a82ba33f4d881ead73b2f0700",
+    "src/options_trading_assistant/engines/scoring.py": "3b9f0a0891e3952a3ba4ea91437d97f925bed294eadf4ee5821848b2d31273d0",
+    "src/options_trading_assistant/engines/signals.py": "1a20316ad5eb080be0014c085d8f8beab91b60234e3df2a6924a98b89e737181",
+    "src/options_trading_assistant/engines/trade_construction.py": "b6609a9bb44b5d79d6b10979ceb8168e7f64b555642b52e368c78431ed413428",
+    "src/options_trading_assistant/models.py": "f5da5f39055fddaf955046f6cedda82c8b60f618a18a473db37ea851b2926617",
+    "src/options_trading_assistant/providers/historical.py": "aca22d3d2c7797335c47acae0115b8301b7d7f793471feebe49855b388424a88"
+  },
+  "schema_version": "frozen_baseline_v1",
+  "strategy_version": "v4.2"
+}

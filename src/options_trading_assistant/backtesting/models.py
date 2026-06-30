@@ -19,8 +19,10 @@ class OHLCVBar:
 @dataclass(frozen=True)
 class BacktestTrade:
     scenario: str
+    strike_model: str
     entry_date: date
     exit_date: date
+    exit_reason: str
     ticker: str
     sector: str
     score: float
@@ -41,6 +43,7 @@ class BacktestTrade:
     lowest_underlying_price: float
     profit_target_touched: bool
     stop_triggered_before_exit: bool
+    sector_collapse_exit: bool
     market_score_entry: float
     market_score_exit: float
     sector_score_entry: float

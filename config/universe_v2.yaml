@@ -1,0 +1,251 @@
+version: v2
+description: Research universe with scan tiers, symbol metadata, liquidity assumptions, and strategy fit.
+
+scan_tiers: [tier_1_core_leaders, tier_2_sector_leaders]
+research_tiers: [tier_1_core_leaders, tier_2_sector_leaders, tier_3_watchlist]
+
+tier_definitions:
+  tier_1_core_leaders: Excellent options liquidity, tight spreads, institutional volume, and reliable technical behavior.
+  tier_2_sector_leaders: Liquid sector representatives scanned when their sector is leading.
+  tier_3_watchlist: Conditional research names that may be promoted after relative strength or liquidity improves.
+  tier_4_excluded: Permanent or semi-permanent exclusions that should not be scanned.
+
+tier_defaults:
+  tier_1_core_leaders:
+    min_option_open_interest: 1000
+    preferred_spread_widths: [5, 10]
+    exclude_before_earnings_days: 10
+    preferred_strategies: [mean_reversion_recovery, breakout_continuation]
+  tier_2_sector_leaders:
+    min_option_open_interest: 750
+    preferred_spread_widths: [2.5, 5]
+    exclude_before_earnings_days: 10
+    preferred_strategies: [mean_reversion_recovery]
+  tier_3_watchlist:
+    min_option_open_interest: 500
+    preferred_spread_widths: [1, 2.5, 5]
+    exclude_before_earnings_days: 14
+    preferred_strategies: [mean_reversion_recovery]
+  tier_4_excluded:
+    excluded: true
+
+exclusions:
+  symbols: []
+  rules:
+    exclude_leveraged_etfs: true
+    exclude_meme_or_event_distorted_names: true
+    exclude_chronic_wide_spreads: true
+    exclude_low_open_interest: true
+
+symbols:
+  - ticker: AVGO
+    sector: Semiconductors
+    industry: Networking & ASICs
+    tier: tier_1_core_leaders
+    benchmark_etf: SMH
+    min_option_open_interest: 1000
+    preferred_spread_widths: [5, 10]
+    liquidity_score: 9.8
+    average_bid_ask_pct: 0.007
+    average_daily_option_volume: 52000
+    preferred_strategies: [mean_reversion_recovery, breakout_continuation]
+    exclude_before_earnings_days: 10
+  - ticker: NVDA
+    sector: Semiconductors
+    industry: Accelerated Computing & GPUs
+    tier: tier_1_core_leaders
+    benchmark_etf: SMH
+    liquidity_score: 10.0
+    preferred_spread_widths: [5, 10]
+  - ticker: MSFT
+    sector: Technology
+    industry: Cloud Platforms & Software
+    tier: tier_1_core_leaders
+    benchmark_etf: XLK
+    liquidity_score: 10.0
+    preferred_spread_widths: [5, 10]
+  - ticker: META
+    sector: Communication Services
+    industry: Social Platforms & AI Advertising
+    tier: tier_1_core_leaders
+    benchmark_etf: XLC
+    liquidity_score: 9.8
+    preferred_spread_widths: [5, 10]
+  - ticker: AMZN
+    sector: Consumer Discretionary
+    industry: E-Commerce & Cloud
+    tier: tier_1_core_leaders
+    benchmark_etf: XLY
+    liquidity_score: 9.8
+    preferred_spread_widths: [5, 10]
+  - ticker: LMT
+    sector: Aerospace & Defense
+    industry: Defense Prime
+    tier: tier_1_core_leaders
+    benchmark_etf: ITA
+    liquidity_score: 8.8
+    preferred_spread_widths: [5, 10]
+  - ticker: HON
+    sector: Industrials
+    industry: Industrial Conglomerate
+    tier: tier_1_core_leaders
+    benchmark_etf: XLI
+    liquidity_score: 8.6
+    preferred_spread_widths: [2.5, 5]
+  - ticker: RTX
+    sector: Aerospace & Defense
+    industry: Defense & Aerospace Systems
+    tier: tier_1_core_leaders
+    benchmark_etf: ITA
+    liquidity_score: 8.9
+    preferred_spread_widths: [2.5, 5]
+  - ticker: JPM
+    sector: Financials
+    industry: Money Center Bank
+    tier: tier_1_core_leaders
+    benchmark_etf: XLF
+    liquidity_score: 9.5
+    preferred_spread_widths: [2.5, 5]
+  - ticker: COST
+    sector: Consumer Staples
+    industry: Membership Retail
+    tier: tier_1_core_leaders
+    benchmark_etf: XLP
+    liquidity_score: 8.8
+    preferred_spread_widths: [5, 10]
+
+sectors:
+  Technology:
+    benchmark_etfs: [XLK]
+    sector_etfs: [VGT, IYW]
+    tiers:
+      tier_1_core_leaders: [MSFT, AAPL]
+      tier_2_sector_leaders: [ORCL, CRM, NOW, ADBE, INTU, IBM, ACN, CDNS, SNPS, PANW]
+      tier_3_watchlist: [TEAM, MDB, ZM, DOCU, BILL]
+      tier_4_excluded: []
+
+  Semiconductors:
+    benchmark_etfs: [SMH, SOXX]
+    sector_etfs: [XSD]
+    tiers:
+      tier_1_core_leaders: [NVDA, AVGO, AMD]
+      tier_2_sector_leaders: [TSM, ASML, QCOM, TXN, AMAT, LRCX, KLAC, MU, MRVL, ADI, MCHP, INTC]
+      tier_3_watchlist: [ON, MPWR, LSCC, WOLF]
+      tier_4_excluded: []
+
+  Cybersecurity:
+    benchmark_etfs: [CIBR, HACK]
+    sector_etfs: [BUG]
+    tiers:
+      tier_1_core_leaders: [PANW, CRWD]
+      tier_2_sector_leaders: [FTNT, ZS, OKTA, CHKP, CYBR]
+      tier_3_watchlist: [S, TENB, VRNS]
+      tier_4_excluded: []
+
+  Cloud / SaaS:
+    benchmark_etfs: [SKYY, WCLD]
+    sector_etfs: [IGV]
+    tiers:
+      tier_1_core_leaders: [CRM, NOW]
+      tier_2_sector_leaders: [SNOW, DDOG, NET, ADBE, INTU, WDAY, HUBS, SHOP]
+      tier_3_watchlist: [MDB, TEAM, BILL, ZM, DOCU]
+      tier_4_excluded: []
+
+  Industrials:
+    benchmark_etfs: [XLI]
+    sector_etfs: [VIS, IYJ]
+    tiers:
+      tier_1_core_leaders: [HON, CAT, GE]
+      tier_2_sector_leaders: [DE, ETN, EMR, PH, ITW, CMI, URI, ROK, GWW, UPS, FDX]
+      tier_3_watchlist: [MMM, FAST, JCI]
+      tier_4_excluded: []
+
+  Aerospace & Defense:
+    benchmark_etfs: [ITA, XAR]
+    sector_etfs: [PPA]
+    tiers:
+      tier_1_core_leaders: [LMT, RTX, NOC]
+      tier_2_sector_leaders: [GD, BA, TDG, LHX, TXT]
+      tier_3_watchlist: [HII, HEI]
+      tier_4_excluded: []
+
+  Financials:
+    benchmark_etfs: [XLF]
+    sector_etfs: [KBE, KRE, KIE]
+    tiers:
+      tier_1_core_leaders: [JPM, GS, MS]
+      tier_2_sector_leaders: [BAC, WFC, C, USB, PNC, COF, AXP, BLK, SCHW, CME, ICE, SPGI]
+      tier_3_watchlist: [TFC, BK, AIG]
+      tier_4_excluded: []
+
+  Healthcare:
+    benchmark_etfs: [XLV]
+    sector_etfs: [IYH, IBB, XBI]
+    tiers:
+      tier_1_core_leaders: [LLY, UNH, ISRG]
+      tier_2_sector_leaders: [JNJ, MRK, ABBV, PFE, AMGN, GILD, TMO, DHR, ABT, MDT, BMY, REGN, VRTX]
+      tier_3_watchlist: [BIIB, MRNA, DXCM]
+      tier_4_excluded: []
+
+  Energy:
+    benchmark_etfs: [XLE]
+    sector_etfs: [XOP, OIH]
+    tiers:
+      tier_1_core_leaders: [XOM, CVX, COP]
+      tier_2_sector_leaders: [SLB, EOG, MPC, PSX, VLO, OXY, HAL, FANG, DVN, KMI, WMB]
+      tier_3_watchlist: [HES, APA, MRO]
+      tier_4_excluded: []
+
+  Utilities:
+    benchmark_etfs: [XLU]
+    sector_etfs: [VPU, IDU]
+    tiers:
+      tier_1_core_leaders: [NEE, SO, DUK]
+      tier_2_sector_leaders: [AEP, EXC, SRE, D, PEG, ED, XEL, WEC, ETR]
+      tier_3_watchlist: [AWK, CEG]
+      tier_4_excluded: []
+
+  Consumer Discretionary:
+    benchmark_etfs: [XLY]
+    sector_etfs: [VCR, XRT]
+    tiers:
+      tier_1_core_leaders: [AMZN, TSLA, HD]
+      tier_2_sector_leaders: [MCD, NKE, LOW, SBUX, BKNG, TJX, ORLY, AZO, MAR, CMG, TGT]
+      tier_3_watchlist: [ROST, LULU, RCL]
+      tier_4_excluded: []
+
+  Consumer Staples:
+    benchmark_etfs: [XLP]
+    sector_etfs: [VDC, IYK]
+    tiers:
+      tier_1_core_leaders: [COST, PG, KO]
+      tier_2_sector_leaders: [PEP, WMT, PM, MO, MDLZ, CL, KMB, GIS, HSY, KR]
+      tier_3_watchlist: [K, SYY, EL]
+      tier_4_excluded: []
+
+  Communication Services:
+    benchmark_etfs: [XLC]
+    sector_etfs: [VOX, FCOM]
+    tiers:
+      tier_1_core_leaders: [META, GOOGL, NFLX]
+      tier_2_sector_leaders: [GOOG, DIS, CMCSA, T, VZ, TMUS, CHTR, EA, TTWO]
+      tier_3_watchlist: [RBLX, SNAP, PINS]
+      tier_4_excluded: []
+
+  Materials:
+    benchmark_etfs: [XLB]
+    sector_etfs: [VAW, IYM]
+    tiers:
+      tier_1_core_leaders: [LIN, APD, SHW]
+      tier_2_sector_leaders: [FCX, NEM, DOW, DD, ECL, PPG, NUE, STLD, MLM, VMC]
+      tier_3_watchlist: [ALB, MOS]
+      tier_4_excluded: []
+
+  Real Estate:
+    benchmark_etfs: [XLRE]
+    sector_etfs: [VNQ, IYR]
+    tiers:
+      tier_1_core_leaders: [PLD, AMT, EQIX]
+      tier_2_sector_leaders: [CCI, SPG, O, WELL, PSA, DLR, VICI, CBRE, EXR]
+      tier_3_watchlist: [AVB, EQR]
+      tier_4_excluded: [SQQQ, TQQQ, UVXY, VXX]
