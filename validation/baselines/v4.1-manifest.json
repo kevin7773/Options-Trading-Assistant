@@ -1,0 +1,19 @@
+{
+  "files": {
+    "config/scoring.yaml": "a765d3d2bde2d690672680a865820e59162f4877f9f2dc481d7c57e2ef54e855",
+    "config/strategy.yaml": "08cee81c5314116d570ded5fc4f511b2fce570628aee86e09609983cc5362bcd",
+    "config/universe.yaml": "cc5f2951ad75baa0a0f8bb3aec935de2b61733b2c8501e8819bf2ef7b0258862",
+    "src/options_trading_assistant/backtesting/engine.py": "fed2ed222cd140f74616f2f246b60d8082874556fc228e9c241ae58767955ec6",
+    "src/options_trading_assistant/backtesting/scenarios.py": "a7c44f5512365a478f71403641616561780e55139b167f120987dbff7414f724",
+    "src/options_trading_assistant/backtesting/synthetic_options_model.py": "f52304c15a319024c89e4d481c67da2a6487c3bb82efe6b82a6b4da4fad01c57",
+    "src/options_trading_assistant/engines/cooling_off.py": "1c998086d314167424c6b61b1af8ce52cfae3567c0090da6097e5c22bda472ac",
+    "src/options_trading_assistant/engines/scanner.py": "81ff617d602f28d287671bb4334f58ffd6f85a4a82ba33f4d881ead73b2f0700",
+    "src/options_trading_assistant/engines/scoring.py": "3b9f0a0891e3952a3ba4ea91437d97f925bed294eadf4ee5821848b2d31273d0",
+    "src/options_trading_assistant/engines/signals.py": "1a20316ad5eb080be0014c085d8f8beab91b60234e3df2a6924a98b89e737181",
+    "src/options_trading_assistant/engines/trade_construction.py": "e86323b2179f8e092b32212eeedf55cdbfbac6bd493b6cb52f6aed77712b8bf2",
+    "src/options_trading_assistant/models.py": "f5da5f39055fddaf955046f6cedda82c8b60f618a18a473db37ea851b2926617",
+    "src/options_trading_assistant/providers/historical.py": "c99bd9f1463016101493fc9cd5c28940bb8da769b9d174d4d406fc4ccec7ad04"
+  },
+  "schema_version": "frozen_baseline_v1",
+  "strategy_version": "v4.1"
+}

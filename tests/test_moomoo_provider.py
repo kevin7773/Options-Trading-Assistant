@@ -1,4 +1,9 @@
-from options_trading_assistant.providers.moomoo import MoomooDataProvider
+from datetime import date
+
+import pytest
+
+from options_trading_assistant.config import load_config
+from options_trading_assistant.providers.moomoo import MoomooDataProvider, MoomooProviderError
 
 
 def test_iv_decimal_normalizes_percentage_values():
@@ -51,3 +56,35 @@ def test_volatility_signal_marks_true_vix_risk_off_when_high_and_rising():
     assert signal["vix"] == 23.0
     assert signal["rising"] is True
     assert signal["risk_off"] is True
+
+
+def test_confirmation_does_not_call_gap_up_red_candle_green():
+    history = [
+        {"open": 100.0, "high": 101.0, "close": 100.0}
+        for _ in range(20)
+    ]
+    history.append({"open": 102.0, "high": 103.0, "close": 101.0})
+
+    signals = MoomooDataProvider._confirmation_signals(history, history)
+
+    assert "green_daily_candle" not in signals
+
+
+def test_making_lower_lows_detects_declining_non_overlapping_windows():
+    history = [
+        {"low": float(115 - index), "close": float(116 - index)}
+        for index in range(15)
+    ]
+
+    assert MoomooDataProvider._making_lower_lows(history) is True
+
+
+def test_history_rejects_short_series_for_long_term_request():
+    provider = MoomooDataProvider(load_config())
+    provider._call = lambda *args, **kwargs: [
+        {"close": 100.0, "volume": 1_000_000}
+        for _ in range(30)
+    ]
+
+    with pytest.raises(MoomooProviderError, match="requested 230, received 30"):
+        provider._history("MSFT", date(2026, 6, 26), days=230)

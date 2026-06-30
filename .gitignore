@@ -8,6 +8,7 @@ env/
 
 data/journal/*.jsonl
 data/journal/decision_packets/
+data/journal/signal_rankings/
 data/reports/daily/*.md
 data/reports/daily/*.html
 data/dashboard/

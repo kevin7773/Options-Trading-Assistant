@@ -6,7 +6,7 @@ import os
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -45,7 +45,7 @@ class MassiveHistoricalClient:
         bars = [
             OHLCVBar(
                 ticker=ticker.upper(),
-                date=datetime.fromtimestamp(row["t"] / 1000).date(),
+                date=datetime.fromtimestamp(row["t"] / 1000, tz=timezone.utc).date(),
                 open=float(row["o"]),
                 high=float(row["h"]),
                 low=float(row["l"]),
@@ -216,12 +216,20 @@ class HistoricalDataProvider(DataProvider):
             bar = self._bar_on(ticker, as_of)
             rsi = _rsi(series, 14)
             confirmation = []
-            if len(series) >= 2 and bar.close > series[-2].close:
+            if bar.close > bar.open:
                 confirmation.append("green_daily_candle")
             if len(series) >= 3 and series[-1].low > series[-2].low:
                 confirmation.append("higher_low")
             if len(series) >= 2 and bar.close > series[-2].high:
                 confirmation.append("close_above_previous_high")
+            if (
+                len(series) >= 21
+                and bar.close > _sma(series, 20)
+                and series[-2].close <= _sma(series[:-1], 20)
+            ):
+                confirmation.append("reclaim_of_20_day_moving_average")
+            if len(series) >= 21 and bar.close > max(item.high for item in series[-21:-1]):
+                confirmation.append("break_above_recent_swing_high")
             stocks.append(
                 StockSnapshot(
                     ticker=ticker,
@@ -229,8 +237,8 @@ class HistoricalDataProvider(DataProvider):
                     price=bar.close,
                     above_100dma=_above_sma(series, 100),
                     above_200dma=_above_sma(series, 200),
-                    trend_90d=_pct_change(series, 90),
-                    sector_relative_strength=_relative_return(series, sector_series, 20),
+                    trend_90d=_pct_change(series, 90) / 100,
+                    sector_relative_strength=_relative_return(series, sector_series, 20) / 100,
                     drawdown_from_swing_high_pct=_drawdown_from_high(series, 30),
                     rsi=rsi,
                     near_support=bar.close <= _sma(series, 20) * 1.03,

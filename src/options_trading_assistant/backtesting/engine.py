@@ -11,6 +11,7 @@ from typing import Any
 from options_trading_assistant.backtesting.models import BacktestResult, BacktestTrade
 from options_trading_assistant.backtesting.scenarios import BALANCED_SCENARIO, BacktestScenario
 from options_trading_assistant.config import AppConfig, PROJECT_ROOT
+from options_trading_assistant.engines.cooling_off import CoolingOffTracker
 from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.engines.scoring import score_market, score_sector
 from options_trading_assistant.models import RecommendationAction, ScanResult, TradeCandidate
@@ -26,20 +27,28 @@ class BacktestRunner:
         provider: HistoricalDataProvider,
         output_root: Path | None = None,
         scenario: BacktestScenario | None = None,
+        detailed_artifacts: bool = True,
     ):
         self.scenario = scenario or BALANCED_SCENARIO
         self.config = scenario_config(config, self.scenario)
         self.provider = provider
         self.output_root = output_root or PROJECT_ROOT / "backtesting" / "results"
+        self.detailed_artifacts = detailed_artifacts
 
     def run(self, mode: str, start: date, end: date, run_id: str | None = None) -> BacktestResult:
         resolved_run_id = run_id or f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{mode}-{self.scenario.name}-{start}-{end}"
         output_dir = self.output_root / resolved_run_id
         output_dir.mkdir(parents=True, exist_ok=True)
-        scanner = DailyScanner(config=self.config, provider=self.provider)
+        cooling_off_tracker = CoolingOffTracker.from_config(self.config)
+        scanner = DailyScanner(
+            config=self.config,
+            provider=self.provider,
+            cooling_off_tracker=cooling_off_tracker,
+        )
 
         scans: list[ScanResult] = []
         trades: list[BacktestTrade] = []
+        pending_outcomes: list[BacktestTrade] = []
         dates = self.provider.available_dates(start, end)
         if not dates:
             raise RuntimeError(
@@ -47,12 +56,21 @@ class BacktestRunner:
             )
 
         for as_of in dates:
+            closed_outcomes = [trade for trade in pending_outcomes if trade.exit_date < as_of]
+            for trade in closed_outcomes:
+                cooling_off_tracker.record_outcome(trade.ticker, trade.final_pl)
+            pending_outcomes = [trade for trade in pending_outcomes if trade.exit_date >= as_of]
+
             result = scanner.run(mode=mode, as_of=as_of)
             scans.append(result)
-            append_scan_result(result, journal_dir=output_dir)
-            packet_paths = write_decision_packets(result, output_dir / "decision_packets")
+            packet_paths: list[Path] = []
+            if self.detailed_artifacts:
+                append_scan_result(result, journal_dir=output_dir)
+                packet_paths = write_decision_packets(result, output_dir / "decision_packets")
             if result.action == RecommendationAction.BUY:
-                trades.extend(self._simulate_recommendations(result, packet_paths))
+                simulated = self._simulate_recommendations(result, packet_paths)
+                trades.extend(simulated)
+                pending_outcomes.extend(simulated)
 
         self._write_trades(output_dir, trades)
         summary = summarize_backtest(scans, trades)
@@ -76,10 +94,11 @@ class BacktestRunner:
     def _simulate_recommendations(self, result: ScanResult, packet_paths: list[Path]) -> list[BacktestTrade]:
         trades: list[BacktestTrade] = []
         recommendation_paths = [path for path in packet_paths if path.name.startswith("recommendation-")]
-        for candidate, packet_path in zip(result.recommendations, recommendation_paths):
+        for index, candidate in enumerate(result.recommendations):
             trade = simulate_spread_outcome(self.provider, self.config, result, candidate)
             trades.append(trade)
-            _merge_packet_outcome(packet_path, trade)
+            if index < len(recommendation_paths):
+                _merge_packet_outcome(recommendation_paths[index], trade)
         return trades
 
     @staticmethod
@@ -100,8 +119,15 @@ def run_backtest(
     output_root: Path | None = None,
     run_id: str | None = None,
     scenario: BacktestScenario | None = None,
+    detailed_artifacts: bool = True,
 ) -> BacktestResult:
-    return BacktestRunner(config=config, provider=provider, output_root=output_root, scenario=scenario).run(
+    return BacktestRunner(
+        config=config,
+        provider=provider,
+        output_root=output_root,
+        scenario=scenario,
+        detailed_artifacts=detailed_artifacts,
+    ).run(
         mode=mode,
         start=start,
         end=end,
@@ -118,7 +144,11 @@ def simulate_spread_outcome(
     spread = candidate.spread
     target_exit = min(spread.expiration, result.as_of + timedelta(days=14))
     planned_exit_date, planned_exit_price = provider.close_on_or_before(candidate.stock.ticker, target_exit)
-    hold_bars = provider.bars_between(candidate.stock.ticker, result.as_of, planned_exit_date)
+    hold_bars = tuple(
+        bar
+        for bar in provider.bars_between(candidate.stock.ticker, result.as_of, planned_exit_date)
+        if bar.date > result.as_of
+    )
     entry_price = candidate.stock.price
     high_price = max((bar.high for bar in hold_bars), default=entry_price)
     low_price = min((bar.low for bar in hold_bars), default=entry_price)

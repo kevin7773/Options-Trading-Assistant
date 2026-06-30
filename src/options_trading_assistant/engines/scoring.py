@@ -12,6 +12,15 @@ from options_trading_assistant.models import (
 )
 
 
+BASE_CATEGORY_POINTS = {
+    "market": 30.0,
+    "sector": 15.0,
+    "trend": 20.0,
+    "confirmation": 20.0,
+    "options": 15.0,
+}
+
+
 def clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     return max(lower, min(value, upper))
 
@@ -35,6 +44,8 @@ def market_block_reason(snapshot: MarketSnapshot, market_config: dict) -> str | 
         return "S&P 500 is below its 20-day moving average."
     if market_config["require_nasdaq_above_20dma"] and not snapshot.nasdaq_above_20dma:
         return "Nasdaq is below its 20-day moving average."
+    if snapshot.volatility_risk_off:
+        return f"{snapshot.volatility_source} volatility proxy is signaling risk-off conditions."
     if snapshot.vix > market_config["max_vix_if_rising"] and snapshot.vix_rising:
         return "VIX is above the configured limit and rising."
     if snapshot.distribution_days >= market_config["max_distribution_days"]:
@@ -126,15 +137,19 @@ def score_options(spread: OptionSpread, trade_config: dict, as_of: date) -> floa
     return round(min(score, 15.0), 2)
 
 
-def grade_for_score(total_score: float) -> str:
+def grade_for_score(total_score: float, thresholds: dict | None = None) -> str:
     rounded = floor(total_score)
-    if rounded >= 95:
+    configured = thresholds or {}
+    strong_buy = int(configured.get("strong_buy", 90))
+    buy = int(configured.get("buy", 80))
+    watchlist = int(configured.get("watchlist", 70))
+    if rounded >= strong_buy + 5:
         return "A+"
-    if rounded >= 90:
+    if rounded >= strong_buy:
         return "A"
-    if rounded >= 80:
+    if rounded >= buy:
         return "B"
-    if rounded >= 70:
+    if rounded >= watchlist:
         return "Watchlist"
     return "No Trade"
 
@@ -145,11 +160,53 @@ def build_score_breakdown(
     trend_score: float,
     confirmation_score: float,
     options_score: float,
+    scoring_config: dict | None = None,
 ) -> ScoreBreakdown:
+    raw_scores = {
+        "market": market_score,
+        "sector": sector_score,
+        "trend": trend_score,
+        "confirmation": confirmation_score,
+        "options": options_score,
+    }
+    configured_points = _configured_category_points(scoring_config)
     return ScoreBreakdown(
-        market=round(market_score, 2),
-        sector=round(sector_score, 2),
-        trend=round(trend_score, 2),
-        confirmation=round(confirmation_score, 2),
-        options=round(options_score, 2),
+        market=_weighted_category_score("market", raw_scores["market"], configured_points),
+        sector=_weighted_category_score("sector", raw_scores["sector"], configured_points),
+        trend=_weighted_category_score("trend", raw_scores["trend"], configured_points),
+        confirmation=_weighted_category_score("confirmation", raw_scores["confirmation"], configured_points),
+        options=_weighted_category_score("options", raw_scores["options"], configured_points),
     )
+
+
+def _configured_category_points(scoring_config: dict | None) -> dict[str, float]:
+    if not scoring_config:
+        return dict(BASE_CATEGORY_POINTS)
+
+    weights = scoring_config.get("weights") or {}
+    positive_weights = {
+        category: max(float(weights.get(category, 0.0)), 0.0)
+        for category in BASE_CATEGORY_POINTS
+    }
+    weight_total = sum(positive_weights.values())
+    if weight_total > 0:
+        return {
+            category: weight / weight_total * 100
+            for category, weight in positive_weights.items()
+        }
+
+    configured = scoring_config.get("category_points") or {}
+    return {
+        category: float(configured.get(category, default))
+        for category, default in BASE_CATEGORY_POINTS.items()
+    }
+
+
+def _weighted_category_score(
+    category: str,
+    raw_score: float,
+    configured_points: dict[str, float],
+) -> float:
+    raw_max = BASE_CATEGORY_POINTS[category]
+    quality = clamp(raw_score / raw_max)
+    return round(quality * configured_points[category], 2)

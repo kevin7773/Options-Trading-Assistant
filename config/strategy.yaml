@@ -1,5 +1,5 @@
 strategy_name: mean_reversion_bull_call_v4
-strategy_version: v4.0
+strategy_version: v4.1
 default_mode: balanced
 
 modes:

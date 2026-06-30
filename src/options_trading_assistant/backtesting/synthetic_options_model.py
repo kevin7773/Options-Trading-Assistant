@@ -33,7 +33,7 @@ def estimate_bull_call_spread_debit(
     distance_to_short = ((short_strike - underlying_price) / underlying_price) * 100
     expected_move = underlying_price * (expected_move_pct / 100)
 
-    moneyness_adjustment = _clamp((distance_to_long / 100) * 1.20, -0.04, 0.08)
+    moneyness_adjustment = _clamp(-(distance_to_long / 100) * 1.20, -0.08, 0.04)
     iv_adjustment = _clamp((iv_proxy - 0.30) * 0.12, -0.03, 0.05)
     time_adjustment = _clamp((dte - 28) / 400, -0.025, 0.025)
     expected_move_adjustment = _clamp(((expected_move_pct - max(distance_to_long, 0)) / 100) * 0.60, 0.0, 0.06)
@@ -43,7 +43,7 @@ def estimate_bull_call_spread_debit(
         + moneyness_adjustment
         + iv_adjustment
         + time_adjustment
-        - expected_move_adjustment,
+        + expected_move_adjustment,
         min_debit_pct,
         max_debit_pct,
     )
@@ -51,7 +51,7 @@ def estimate_bull_call_spread_debit(
     estimated_reward_risk = 0.0 if estimated_debit <= 0 else round((width - estimated_debit) / estimated_debit, 2)
     reason = (
         f"base={base_debit_pct:.2f}, moneyness={moneyness_adjustment:+.3f}, iv={iv_adjustment:+.3f}, "
-        f"time={time_adjustment:+.3f}, expected_move={-expected_move_adjustment:+.3f}"
+        f"time={time_adjustment:+.3f}, expected_move={expected_move_adjustment:+.3f}"
     )
     return SyntheticOptionEstimate(
         estimated_debit=estimated_debit,

@@ -40,9 +40,11 @@ The scanner pipeline runs in this order:
 3. Stock trend
 4. Mean reversion setup
 5. Confirmation
-6. Options spread quality
-7. Final scoring and recommendation
-8. Journaling and review
+6. Signal Engine output
+7. Trade Construction Engine
+8. Options spread quality
+9. Final scoring and recommendation
+10. Journaling and review
 
 Later stages must not override hard failures from earlier stages. For example, a strong option chain cannot rescue a hostile market regime.
 
@@ -90,6 +92,28 @@ Hard failures include invalid debit, debit at or above spread width, max loss ab
 
 Other inputs include expiration, spread width, long-leg delta, open interest, bid/ask width, volume, and IV.
 
+## Independent Research Layers
+
+The scanner is split into two research projects with a one-way boundary:
+
+```text
+Signal Engine
+  Market -> Sector -> Stock -> Confirmation
+                    |
+                    v
+            SignalCandidate
+                    |
+                    v
+Trade Construction Engine
+  Expiration -> Strikes -> Width -> Debit -> Risk
+```
+
+`SignalEngine` must not request option-chain data. It produces provider-neutral stock signals and full stock rankings, including rejected stocks for research.
+
+`TradeConstructionEngine` must not rescore the market, rerank sectors, or rescan stocks. It consumes qualified signals and evaluates spread structures.
+
+Research must report the two layers separately. A good stock signal with a poor spread is a trade-construction failure, not evidence that the signal was wrong. A profitable spread cannot rescue a failed signal.
+
 ## Module Boundaries
 
 ### `options_trading_assistant.models`
@@ -122,7 +146,10 @@ Current providers:
 
 Owns strategy logic.
 
-Scoring, filtering, scanner orchestration, and future trade-management logic belong here.
+- `signals.py` owns market, sector, stock, mean-reversion, and confirmation research.
+- `trade_construction.py` owns expiration, strike, width, debit, liquidity, and risk research.
+- `scanner.py` only coordinates the two layers.
+- Scoring and future trade-management logic remain explicit supporting modules.
 
 ### `options_trading_assistant.reports`
 
@@ -176,6 +203,16 @@ DailyScanner
     |
     v
 Backtest artifacts / metrics / simulated decision packets
+```
+
+Edge validation consumes frozen outputs without retuning either engine:
+
+```text
+Frozen v4.1 baseline
+    |
+    +--> Signal ranking experiment -> forward stock returns
+    |
+    +--> Trade evidence -> independent setups -> costs / confidence / benchmarks
 ```
 
 ## Workbench Commands
