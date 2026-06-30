@@ -32,6 +32,7 @@ Until that loop completes, the priority is evidence quality over strategy change
 - Keep production behavior unchanged.
 - Build H-006 visual analytics around decision packets and prospective logs.
 - Preserve all recommendation, rejection, and sit-out packets.
+- Produce the first month-end gate-effectiveness table using matured 5-day and 21-day SPY outcomes.
 - Do not promote v4.3 changes during the initial evidence-collection window.
 
 ## August 2026

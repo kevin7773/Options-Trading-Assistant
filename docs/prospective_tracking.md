@@ -125,6 +125,32 @@ python -m options_trading_assistant.cli validate-edge `
   --output-dir data/reports/validation/forward
 ```
 
+## Month-End Gate Effectiveness Review
+
+At the end of each month, summarize whether the scanner's hard stops and opportunity filters avoided weak forward environments.
+
+Use one observation per scan date. Do not count multiple packets from the same date as independent gate observations.
+
+Measure forward market outcomes as:
+
+- `5-Day Outcome`: SPY close-to-close return from the scan date through the fifth subsequent US trading session.
+- `21-Day Outcome`: SPY close-to-close return from the scan date through the twenty-first subsequent US trading session.
+
+Keep an outcome blank until its trading-session horizon has matured. Report both average and median returns so a single shock does not dominate interpretation.
+
+Required table:
+
+| Gate | Times Triggered | Average 5-Day Outcome | Median 5-Day Outcome | Average 21-Day Outcome | Median 21-Day Outcome |
+|---|---:|---:|---:|---:|---:|
+| Distribution Days | 0 | pending | pending | pending | pending |
+| Below 20 DMA | 0 | pending | pending | pending | pending |
+| High VIX | 0 | pending | pending | pending | pending |
+| No Stock Setup | 0 | pending | pending | pending | pending |
+
+The review asks whether each gate is informative, not whether it agrees with the original design. Favorable, unfavorable, and inconclusive results all remain part of the prospective research record.
+
+Do not change a gate from one month of evidence. Any proposed change must become a documented hypothesis with predefined promotion and rejection criteria.
+
 ## Rules
 
 Do not:
