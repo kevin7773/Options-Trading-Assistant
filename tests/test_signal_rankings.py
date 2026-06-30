@@ -22,6 +22,8 @@ def test_signal_snapshot_saves_ranked_stocks_before_trade_construction(tmp_path)
     assert payload["rankings"]
     assert payload["rankings"][0]["predicted_rank"] == 1
     assert "qualified_for_trade_construction" in payload["rankings"][0]
+    assert payload["top_sector_etf"] == "XLV"
+    assert len(payload["eligible_universe"]) == len(result.rankings)
 
 
 def test_market_blocked_snapshot_records_no_rankings(tmp_path):
