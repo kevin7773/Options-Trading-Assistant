@@ -42,6 +42,13 @@ def test_render_dashboard_html_includes_filters_and_report_data():
                 "path": "docs/prospective_tracking.md",
                 "content": "INSUFFICIENT EVIDENCE",
             },
+            {
+                "type": "experiment",
+                "date": "2026-06-30",
+                "label": "EXP-2026-001 · H-005 · rejected",
+                "path": "research/experiments/EXP-2026-001.yaml",
+                "content": "Decision: rejected\nExpectancy: $44.98",
+            },
         ]
     )
 
@@ -53,7 +60,9 @@ def test_render_dashboard_html_includes_filters_and_report_data():
     assert "Backtest / benchmark summaries" in html
     assert "Prospective evidence" in html
     assert "Universe" in html
+    assert "Research experiments" in html
     assert "tier_1_core_leaders" in html
+    assert "EXP-2026-001" in html
 
 
 def test_build_dashboard_writes_index_file(tmp_path):
@@ -62,6 +71,15 @@ def test_build_dashboard_writes_index_file(tmp_path):
     assert path.exists()
     assert path.name == "index.html"
     assert "Options Trading Assistant Dashboard" in path.read_text(encoding="utf-8")
+
+
+def test_build_dashboard_includes_experiment_manifest():
+    path = build_dashboard()
+    html = path.read_text(encoding="utf-8")
+
+    assert "EXP-2026-001" in html
+    assert "Decision: rejected" in html
+    assert "$-16.66 vs baseline" in html
 
 
 def test_dashboard_escapes_script_terminators_in_embedded_report_json():

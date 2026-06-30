@@ -7,6 +7,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from options_trading_assistant.config import PROJECT_ROOT, load_config
 
 
@@ -40,6 +42,7 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
     validation_reports_dir = PROJECT_ROOT / "data" / "reports" / "validation"
     signal_rankings_dir = PROJECT_ROOT / "data" / "journal" / "signal_rankings"
     prospective_doc = PROJECT_ROOT / "docs" / "prospective_tracking.md"
+    experiment_dir = PROJECT_ROOT / "research" / "experiments"
 
     for path in sorted(daily_dir.glob("*-daily-report.html")) if daily_dir.exists() else []:
         items.append(_report_item(path, "Daily HTML Report", "html"))
@@ -67,6 +70,13 @@ def collect_dashboard_items() -> list[dict[str, Any]]:
 
     for path in sorted(signal_rankings_dir.rglob("*.json")) if signal_rankings_dir.exists() else []:
         items.append(_signal_ranking_item(path))
+
+    for path in sorted(experiment_dir.rglob("*.yaml")) if experiment_dir.exists() else []:
+        items.append(_experiment_manifest_item(path))
+
+    readme = experiment_dir / "README.md"
+    if readme.exists():
+        items.append(_report_item(readme, "Experiment Manifest Spec", "experiment"))
 
     if prospective_doc.exists():
         items.append(_report_item(prospective_doc, "Prospective Tracking Runbook", "prospective"))
@@ -258,6 +268,7 @@ def render_dashboard_html(items: list[dict[str, Any]]) -> str:
         <option value="backtest">Backtest / benchmark summaries</option>
         <option value="validation">Edge validation reports</option>
         <option value="prospective">Prospective evidence</option>
+        <option value="experiment">Research experiments</option>
         <option value="universe">Universe</option>
       </select>
 
@@ -453,6 +464,30 @@ def _signal_ranking_item(path: Path) -> dict[str, Any]:
     }
 
 
+def _experiment_manifest_item(path: Path) -> dict[str, Any]:
+    content = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        payload = yaml.safe_load(content) or {}
+    except yaml.YAMLError:
+        payload = {}
+    experiment_id = str(payload.get("experiment_id") or path.stem)
+    hypotheses = ", ".join(payload.get("hypotheses") or [])
+    decision = (payload.get("decision") or {}).get("status") or payload.get("status") or "unknown"
+    date_value = str(payload.get("date_completed") or payload.get("date_started") or "experiment")
+    name = payload.get("name") or path.stem
+    formatted = _format_experiment_manifest(payload) if payload else content
+    return {
+        "type": "experiment",
+        "date": date_value,
+        "label": f"{date_value} · {experiment_id} · {hypotheses or 'no hypothesis'} · {decision}",
+        "path": str(path),
+        "content": formatted,
+        "experiment_id": experiment_id,
+        "decision": decision,
+        "name": name,
+    }
+
+
 def _universe_summary_item(path: Path) -> dict[str, Any]:
     config = load_config()
     sectors = config.universe.get("sectors", {})
@@ -524,11 +559,100 @@ def _format_backtest_summary(run_name: str, summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_experiment_manifest(payload: dict[str, Any]) -> str:
+    baseline = payload.get("baseline_results") or {}
+    results = payload.get("results") or {}
+    decision = payload.get("decision") or {}
+    hypotheses = ", ".join(payload.get("hypotheses") or [])
+    lines = [
+        f"Experiment: {payload.get('experiment_id', 'unknown')}",
+        "",
+        f"Name: {payload.get('name', 'unknown')}",
+        f"Strategy: {payload.get('strategy', 'unknown')}",
+        f"Baseline: {payload.get('baseline', 'unknown')}",
+        f"Hypotheses: {hypotheses or 'none'}",
+        f"Status: {payload.get('status', 'unknown')}",
+        f"Decision: {decision.get('status', 'pending')}",
+        "",
+        "Result Summary",
+        f"- Trade count: {_fmt_value(results.get('trade_count'))} ({_delta(results.get('trade_count'), baseline.get('trade_count'))} vs baseline)",
+        f"- Win rate: {_pct(results.get('win_rate'))} ({_delta_pct(results.get('win_rate'), baseline.get('win_rate'))} vs baseline)",
+        f"- Expectancy: {_money(results.get('expectancy'))} ({_delta_money(results.get('expectancy'), baseline.get('expectancy'))} vs baseline)",
+        f"- Max drawdown: {_money(results.get('drawdown'))} ({_delta_money(results.get('drawdown'), baseline.get('drawdown'))} vs baseline)",
+        "",
+        "Baseline",
+        f"- Run: {baseline.get('run_id', 'unknown')}",
+        f"- Trades: {_fmt_value(baseline.get('trade_count'))}",
+        f"- Win rate: {_pct(baseline.get('win_rate'))}",
+        f"- Expectancy: {_money(baseline.get('expectancy'))}",
+        f"- Max drawdown: {_money(baseline.get('drawdown'))}",
+    ]
+    semiconductor = results.get("semiconductor") or {}
+    baseline_semiconductor = baseline.get("semiconductor") or {}
+    if semiconductor or baseline_semiconductor:
+        lines.extend(
+            [
+                "",
+                "Semiconductors",
+                f"- Trades: {_fmt_value(semiconductor.get('trades'))} ({_delta(semiconductor.get('trades'), baseline_semiconductor.get('trades'))} vs baseline)",
+                f"- Win rate: {_pct(semiconductor.get('win_rate'))} ({_delta_pct(semiconductor.get('win_rate'), baseline_semiconductor.get('win_rate'))} vs baseline)",
+                f"- Total P/L: {_money(semiconductor.get('total_pl'))} ({_delta_money(semiconductor.get('total_pl'), baseline_semiconductor.get('total_pl'))} vs baseline)",
+                f"- Expectancy: {_money(semiconductor.get('expectancy'))}",
+            ]
+        )
+    artifacts = payload.get("artifacts") or {}
+    lines.extend(["", "Artifacts"])
+    for key, values in artifacts.items():
+        if not values:
+            continue
+        lines.append(f"- {key}:")
+        for value in values:
+            lines.append(f"  - {value}")
+    if not any(artifacts.values()):
+        lines.append("- none")
+    rationale = decision.get("rationale")
+    if rationale:
+        lines.extend(["", "Decision Rationale", str(rationale).strip()])
+    return "\n".join(lines)
+
+
 def _pct(value: Any) -> str:
     try:
         return f"{float(value):.1%}"
     except (TypeError, ValueError):
         return "0.0%"
+
+
+def _fmt_value(value: Any) -> str:
+    return "n/a" if value is None else str(value)
+
+
+def _money(value: Any) -> str:
+    try:
+        return f"${float(value):.2f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _delta(value: Any, baseline: Any) -> str:
+    try:
+        return f"{float(value) - float(baseline):+.0f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _delta_money(value: Any, baseline: Any) -> str:
+    try:
+        return f"${float(value) - float(baseline):+.2f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _delta_pct(value: Any, baseline: Any) -> str:
+    try:
+        return f"{float(value) - float(baseline):+.1%}"
+    except (TypeError, ValueError):
+        return "n/a"
 
 
 def _date_from_run_name(name: str) -> str:
