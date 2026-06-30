@@ -6,7 +6,9 @@ When implementation details are unclear, prefer the choice that preserves discip
 
 ## Mission
 
-Build a disciplined options trading assistant that identifies high-quality bull call spread opportunities while protecting capital.
+Build a disciplined options trading assistant that identifies the highest-quality risk-adjusted options strategy for the current market regime while protecting capital.
+
+Bull call spreads are the current production strategy, not the end goal. The project should preserve the ability to compare bull call spreads against future strategies such as bear put spreads, iron condors, cash-secured puts, covered calls, and other structures under the same evidence discipline.
 
 The system must be comfortable saying:
 
@@ -127,6 +129,27 @@ Trade Construction Engine
 `TradeConstructionEngine` must not rescore the market, rerank sectors, or rescan stocks. It consumes qualified signals and evaluates spread structures.
 
 Research must report the two layers separately. A good stock signal with a poor spread is a trade-construction failure, not evidence that the signal was wrong. A profitable spread cannot rescue a failed signal.
+
+## Future Strategy Engine
+
+v5.0 is expected to evolve from a bull-call-spread scanner into a strategy engine. Each strategy family should eventually have:
+
+- Its own frozen production baseline.
+- Its own hypotheses and experiment manifests.
+- Its own promotion and rejection gates.
+- Its own prospective validation record.
+- Its own lifecycle and outcome analysis.
+
+On any given day, the long-term objective is not to force a bull call spread recommendation. The objective is to ask which approved strategy, if any, has the highest expected edge for the current market regime.
+
+Market regime analysis, sector analysis, stock scoring, lifecycle analysis, research governance, and data quality are strategy-agnostic layers. Trade construction is the primary strategy-specific layer and should remain isolated enough that future strategy families can reuse the shared research infrastructure without weakening the current v4.2 baseline.
+
+Future strategy selection should separate two different kinds of edge:
+
+- Opportunity Edge: whether an exploitable setup exists at all, based on market regime, breadth, sector rotation, relative strength, confirmation, pullback quality, and expected move.
+- Expression Edge: the best way to express that opportunity, such as a bull call spread, bear put spread, iron condor, cash-secured put, covered call, or no trade.
+
+v4.2 prospective evidence primarily calibrates Opportunity Edge. Trade expression comes later, after the project understands which market, sector, stock, confirmation, and construction features actually predict quality.
 
 ## Module Boundaries
 

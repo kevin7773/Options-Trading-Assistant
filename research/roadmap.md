@@ -5,7 +5,7 @@
 - Foundation: v1 through v3 built the core scanner, provider abstractions, reports, and safety-first workflow.
 - Strategy: v4.0 through v4.2 froze the mean-reversion recovery philosophy, ATM / ITM construction, reachability guard, and v4.2 baseline.
 - Research: v4.3 established hypothesis governance, experiment manifests, notebook-based measurement, and universe lifecycle metadata.
-- Validation: the current phase collects prospective evidence without changing production behavior.
+- Opportunity Calibration: the current phase collects prospective evidence to learn what a good opportunity looks like before changing production behavior.
 - Optimization: future phase only after enough forward evidence exists to justify rule changes.
 
 ## Next Full-Cycle Milestone

@@ -2,6 +2,10 @@
 
 This project turns the `Mean_Reversion_Bull_Call_Scanner_v4.md` strategy brief into a testable scanner.
 
+The objective of this project is not to prove that any single options strategy is best. The objective is to identify, validate, and continuously improve the strategy with the highest risk-adjusted edge for the current market regime through disciplined, evidence-driven research.
+
+Bull call spreads are the current production strategy, not the end goal. The architecture is intended to support future comparison against other strategy families once evidence justifies that work.
+
 The first implementation is intentionally broker-neutral. It uses deterministic mock data so the scoring, filtering, logging, and CLI can be validated before any live market data or paper-trading API is connected.
 
 Read `ARCHITECTURE.md` before making strategy or provider changes. It is the project constitution.
