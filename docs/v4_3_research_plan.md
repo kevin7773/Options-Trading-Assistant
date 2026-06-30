@@ -71,6 +71,19 @@ promotion_gate:
   minimum_trades: 40
   must_improve_semiconductor_results: true
   must_not_degrade_total_strategy: true
+
+success:
+  semiconductor_expectancy_gt_baseline: true
+  semiconductor_drawdown_lte_baseline: true
+  overall_strategy_expectancy_gte_baseline: true
+  overall_strategy_drawdown_lte_baseline: true
+  minimum_total_trades: 40
+
+failure:
+  overall_expectancy_declines: true
+  overall_drawdown_increases_materially: true
+  trade_count_drops_below_minimum_threshold: true
+  semiconductor_results_do_not_improve: true
 ```
 
 Test question:

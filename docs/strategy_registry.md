@@ -6,12 +6,10 @@ This registry prevents the project from chasing a single green backtest. Every p
 
 ## Status Definitions
 
+- `Accepted`: Evidence supports the hypothesis and the decision is part of the production baseline.
+- `Active`: The hypothesis is currently being tested and must not be promoted without satisfying its success criteria.
+- `Rejected`: Testing did not improve the baseline, introduced unacceptable tradeoffs, or hit its failure condition.
 - `Proposed`: The idea is plausible but not yet tested.
-- `Under investigation`: Early evidence exists, but the result is not durable enough to change the baseline.
-- `Not validated`: Testing did not improve the baseline or introduced unacceptable tradeoffs.
-- `Validated`: Evidence supports the hypothesis across the declared evaluation window.
-- `Prospective`: The hypothesis is frozen into the active forward-tracking baseline and is being observed live.
-- `Rejected`: Evidence or implementation risk makes the idea unsuitable for this strategy family.
 
 ## Evidence Classes
 
@@ -36,17 +34,49 @@ For the current project stage, a future version must:
 - Preserve or explain any degradation in Cloud / SaaS performance.
 - Preserve the market-regime hard stop and frozen-baseline validation discipline.
 
+## Hypothesis Requirements
+
+Every hypothesis should include:
+
+- A stable hypothesis ID.
+- A baseline comparator.
+- A success condition that defines promotion.
+- A failure condition that defines when to stop pursuing the idea.
+- Evidence links or artifact names.
+- A decision that can be understood without rerunning the experiment.
+
+Rejected hypotheses are institutional knowledge. They should remain in the registry so the project does not revisit the same idea without new evidence.
+
 ## Registry
 
-| ID | Hypothesis | Status | Evidence | Current Decision |
-|---|---|---|---|---|
-| H-001 | Market regime filter improves expectancy by preventing trades against broad conditions. | Prospective | Daily scanner behavior, rejection packets, v4.2 backtests. | Keep as a non-negotiable gate. |
-| H-002 | ATM or slightly ITM call spreads express mean-reversion recovery better than OTM debit spreads. | Validated, pending more years | v4.1/v4.2 strike-selection comparisons and improved lifecycle results. | Use mean-reversion recovery construction for v4.2. |
-| H-003 | Reachability guard reduces false positives by requiring the long strike to be reachable within expected move. | Validated | v4.1 comparison and v4.2 frozen construction. | Keep in frozen baseline. |
-| H-004 | High-probability mode improves risk-adjusted returns versus balanced mode. | Not validated | 2024-2026 YTD comparison: slightly higher win rate and expectancy, but fewer trades and worse drawdown. | Do not replace balanced v4.2. Keep as research-only. |
-| H-005 | Semiconductors require a separate high-beta mean-reversion profile. | Under investigation | Balanced and high-probability runs both showed weak semiconductor performance. | Test sector-specific profile in v4.3 research only. |
-| H-006 | Cloud / SaaS is a priority research sector for this strategy family. | Under investigation | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
-| H-007 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Under investigation | v4.2 Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
+| ID | Hypothesis | Status | Baseline | Evidence | Decision |
+|---|---|---|---|---|---|
+| H-001 | Market regime filter improves expectancy by preventing trades against broad conditions. | Accepted | v3.0 | Backtest plus prospective rejection evidence. | Production: keep as a non-negotiable gate. |
+| H-002 | ATM or slightly ITM call spreads improve mean-reversion construction versus OTM debit spreads. | Accepted | v4.0 | Multi-year backtest and lifecycle diagnostics. | Production: use mean-reversion recovery construction. |
+| H-003 | Reachability guard reduces false positives by requiring the long strike to be reachable within expected move. | Accepted | v4.1 | Backtest comparison and v4.2 frozen construction. | Production: keep reachability guard. |
+| H-004 | High-probability mode improves overall performance versus balanced mode. | Rejected | v4.2 | Higher drawdown and fewer trades despite slightly higher expectancy. | Stay on balanced; keep high-probability research-only unless new evidence appears. |
+| H-005 | Semiconductors require a high-beta recovery profile. | Active | v4.2 | v4.3 research branch; balanced and high-probability runs both showed weak semiconductor results. | Pending: test sector-specific profile before changing production. |
+| H-006 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
+| H-007 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
+
+## H-005 Success And Failure Conditions
+
+```yaml
+hypothesis_id: H-005
+
+success:
+  semiconductor_expectancy_gt_baseline: true
+  semiconductor_drawdown_lte_baseline: true
+  overall_strategy_expectancy_gte_baseline: true
+  overall_strategy_drawdown_lte_baseline: true
+  minimum_total_trades: 40
+
+failure:
+  overall_expectancy_declines: true
+  overall_drawdown_increases_materially: true
+  trade_count_drops_below_minimum_threshold: true
+  semiconductor_results_do_not_improve: true
+```
 
 ## Candidate v4.3 Research Hypotheses
 
