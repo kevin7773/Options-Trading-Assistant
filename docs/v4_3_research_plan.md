@@ -49,15 +49,28 @@ Observation:
 - v4.2 balanced Semiconductors: 8 trades, 25.0% win rate, -$203.29 total P/L.
 - v4.2 high-probability Semiconductors: 7 trades, 28.6% win rate, -$293.68 total P/L.
 
-Research profile:
+Research specification:
 
 ```yaml
-Semiconductors:
+hypothesis_id: H-005
+name: semiconductor_high_beta_recovery
+baseline: v4.2 balanced
+status: research_only
+
+profile:
+  sector: Semiconductors
   strategy_profile: mean_reversion_high_beta
   confirmation_required: 3
   max_vix: 18
   preferred_long_strike: atm
   pullback_range: [7, 15]
+
+promotion_gate:
+  must_outperform_v4_2_expectancy: true
+  must_not_exceed_v4_2_drawdown: true
+  minimum_trades: 40
+  must_improve_semiconductor_results: true
+  must_not_degrade_total_strategy: true
 ```
 
 Test question:
