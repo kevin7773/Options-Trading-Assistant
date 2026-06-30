@@ -130,6 +130,8 @@ See `docs/prospective_tracking.md` for the after-close forward evidence collecti
 See `docs/strategy_registry.md` for the evidence-driven hypothesis registry and promotion gate.
 See `docs/v4_3_research_plan.md` for the research-only v4.3 experiment plan.
 See `research/experiments/` for experiment manifests that preserve the audit trail behind strategy decisions.
+See `research/notebooks/` for exploratory notebooks that analyze accumulated evidence without becoming production code.
+See `research/roadmap.md` for the July/August research plan.
 
 Backtest outputs are written under `backtesting/results/<run-id>/` and include `summary.json`, `trades.jsonl`, `scan_results.jsonl`, and simulated decision packets. This is still read-only research infrastructure; it does not place live or paper orders.
 
