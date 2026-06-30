@@ -26,6 +26,18 @@ def test_write_decision_packets_creates_recommendation_and_rejection_files(tmp_p
     assert recommendation["scan"]["mode"] == "balanced"
     assert recommendation["scan"]["context"]["stocks_scanned"] > 0
     assert recommendation["outcome"]["status"] == "pending"
+    features = recommendation["measurement_features"]
+    assert features["hypothesis_id"] == "H-006"
+    assert features["measurement_only"] is True
+    assert features["score_total"] == recommendation["score"]["total"]
+    assert features["score_bucket"] == "90+"
+    assert features["market_score_raw"] == recommendation["scan"]["market_score"]
+    assert features["stock"]["sector_relative_strength"] == recommendation["stock"]["sector_relative_strength"]
+    assert features["stock"]["confirmation_score"] == recommendation["score"]["confirmation"]
+    assert features["sector"]["relative_strength_20d"] == recommendation["sector_snapshot"]["relative_strength_20d"]
+    assert features["spread"]["expected_move_pct"] == recommendation["spread"]["expected_move_pct"]
+    assert features["spread"]["distance_to_long_strike"] is not None
+    assert features["spread"]["iv_rank"] == recommendation["spread"]["iv_rank"]
 
 
 def test_rejection_packet_includes_stage_reasons_and_optional_spread_shape(tmp_path):
@@ -41,6 +53,7 @@ def test_rejection_packet_includes_stage_reasons_and_optional_spread_shape(tmp_p
     assert rejection["long_call"] == 435
     assert rejection["short_call"] == 440
     assert rejection["reasons"]
+    assert "measurement_features" not in rejection
 
 
 def test_repeated_scan_does_not_overwrite_reviewed_packet(tmp_path):

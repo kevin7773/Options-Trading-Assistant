@@ -58,8 +58,9 @@ Material tests should also create an experiment manifest under `research/experim
 | H-003 | Reachability guard reduces false positives by requiring the long strike to be reachable within expected move. | Accepted | v4.1 | Backtest comparison and v4.2 frozen construction. | Production: keep reachability guard. |
 | H-004 | High-probability mode improves overall performance versus balanced mode. | Rejected | v4.2 | Higher drawdown and fewer trades despite slightly higher expectancy. | Stay on balanced; keep high-probability research-only unless new evidence appears. |
 | H-005 | Semiconductors require the tested high-beta recovery profile. | Rejected | v4.2 | `EXP-2026-001`: expectancy declined, drawdown worsened, and semiconductor losses increased. | Do not promote this profile; open a new hypothesis for any different semiconductor treatment. |
-| H-006 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
-| H-007 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
+| H-006 | Pre-entry scores and trade-construction features can predict trade quality. | Active | v4.2 | Prospective decision packets now record measurement-only features before outcomes are known. | Collect data only; do not change trading rules until calibration is proven. |
+| H-012 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
+| H-013 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
 
 ## H-005 Success And Failure Conditions
 
@@ -87,6 +88,61 @@ decision:
     Overall expectancy declined from 61.64 to 44.98, maximum drawdown worsened
     from -362.57 to -528.82, and semiconductor total P/L worsened from -203.29
     to -590.62.
+```
+
+## H-006 Measurement Plan
+
+H-006 does not change strategy behavior. It asks whether the existing scoring system is calibrated enough to predict trade quality before entry.
+
+```yaml
+hypothesis_id: H-006
+name: pre_entry_trade_quality_calibration
+status: active
+baseline: v4.2
+measurement_only: true
+
+features_recorded:
+  scores:
+    - score_total
+    - score_bucket
+    - market_score_raw
+    - score_breakdown.market
+    - score_breakdown.sector
+    - score_breakdown.trend
+    - score_breakdown.confirmation
+    - score_breakdown.options
+    - stock_setup_score
+  market:
+    - vix
+    - vix_rising
+    - distribution_days
+    - breadth_score
+    - growth_participation_score
+  sector:
+    - sector_score
+    - relative_strength_1d
+    - relative_strength_5d
+    - relative_strength_20d
+  stock:
+    - sector_relative_strength
+    - trend_90d
+    - drawdown_from_swing_high_pct
+    - rsi
+    - confirmation_signal_count
+  spread:
+    - expected_move_pct
+    - atr_proxy_pct
+    - distance_to_long_strike
+    - distance_to_short_strike
+    - iv_rank
+    - debit_pct_of_width
+    - reward_to_risk
+
+future_questions:
+  - Do 90+ score trades outperform 80-89 score trades?
+  - Does confirmation score predict win rate or average loss?
+  - Does distance to long strike predict max adverse excursion?
+  - Does IV rank or expected move identify fragile entries?
 ```
 
 ## Candidate v4.3 Research Hypotheses

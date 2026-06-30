@@ -59,6 +59,8 @@ When the market gate passes, verify that the new signal-ranking snapshot contain
 
 Never rewrite or replace older signal-ranking snapshots.
 
+Recommendation decision packets also record H-006 measurement-only pre-entry features. These features support future calibration analysis and must not change the current v4.2 trading decision.
+
 ## Weekly Review
 
 Run every Saturday after the week's daily snapshots are complete.
