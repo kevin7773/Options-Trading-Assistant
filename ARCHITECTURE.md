@@ -217,6 +217,10 @@ Frozen v4.2 baseline
 
 Prospective tracking is governed by `docs/prospective_tracking.md`. Daily evidence collection and weekly review must treat snapshots, packets, and validation reports as immutable evidence, not as tuning prompts.
 
+Strategy research is governed by `docs/strategy_registry.md`. Versions are frozen releases; registry hypotheses are the evidence ledger that explains which ideas are validated, rejected, prospective, or still under investigation.
+
+v4.3 research is governed by `docs/v4_3_research_plan.md`. It may test new hypotheses, but it must compare against v4.2 and must not alter v4.2 prospective evidence collection.
+
 ## Workbench Commands
 
 Workbench commands exist to inspect one pipeline layer at a time:
