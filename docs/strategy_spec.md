@@ -6,6 +6,7 @@ This implementation starts with the v4 bull call spread workflow:
 
 1. Score the market environment.
 2. Block new bullish trades when the market gate fails.
+   The distribution-day sub-rule is configuration-driven and currently defaults to 2 qualifying distribution days within the last 10 sessions.
 3. Rank sectors and only scan the strongest sectors.
 4. Require longer-term stock trend, controlled pullback, and confirmation.
 5. Score candidate bull call spreads for liquidity, pricing, and risk/reward.

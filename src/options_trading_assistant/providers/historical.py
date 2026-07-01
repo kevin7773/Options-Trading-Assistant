@@ -20,6 +20,7 @@ from options_trading_assistant.backtesting.synthetic_options_model import (
     estimate_iv_proxy_from_expected_move,
 )
 from options_trading_assistant.config import AppConfig, PROJECT_ROOT, trade_config_for_symbol
+from options_trading_assistant.engines.distribution_days import evaluate_distribution_days_from_rows, rule_from_market_config
 from options_trading_assistant.models import MarketSnapshot, OptionSpread, SectorSnapshot, StockSnapshot
 from options_trading_assistant.providers.base import DataProvider
 
@@ -156,12 +157,14 @@ class HistoricalDataProvider(DataProvider):
         qqq_bar = self._bar_on("QQQ", as_of)
         vol_bar = self._bar_on(self.vix_proxy, as_of)
 
-        vix_proxy_value = _pct_change(vol, 20) if len(vol) >= 21 else 0.0
-        distribution_days = sum(
-            1
-            for bar, prev in zip(spy[-10:], spy[-11:-1])
-            if bar.close < prev.close and bar.volume > prev.volume
+        distribution_state = evaluate_distribution_days_from_rows(
+            [bar.__dict__ for bar in spy],
+            close_names=["close"],
+            volume_names=["volume"],
+            date_names=["date"],
+            rule=rule_from_market_config(self.config.strategy["market"]),
         )
+        vix_proxy_value = _pct_change(vol, 20) if len(vol) >= 21 else 0.0
         breadth_score = _ratio_above_ma(self._all_configured_tickers(), as_of, 20, provider=self)
         growth_score = _ratio_above_ma(["QQQ", "XLK", "SMH"], as_of, 20, provider=self)
         risk_off = vix_proxy_value > self.config.strategy["market"]["max_vix_if_rising"] and _rising(vol)
@@ -173,9 +176,10 @@ class HistoricalDataProvider(DataProvider):
             vix_rising=_rising(vol),
             volatility_source=self.vix_proxy,
             volatility_risk_off=risk_off,
-            distribution_days=distribution_days,
+            distribution_days=distribution_state.count_in_window,
             breadth_score=breadth_score,
             growth_participation_score=growth_score,
+            distribution_day_triggered=distribution_state.triggered,
         )
 
     def get_sector_snapshots(self, as_of: date) -> tuple[SectorSnapshot, ...]:

@@ -23,6 +23,7 @@ experiment_id: EXP-YYYY-NNN
 strategy: v4.3
 baseline: v4.2
 status: planned
+layer: opportunity_visibility
 
 hypotheses:
   - H-005
@@ -82,6 +83,29 @@ decision:
   rationale:
   decided_at:
 ```
+
+## Layer Field
+
+Every experiment manifest should declare the primary architectural layer it operates on.
+
+Allowed values:
+
+- `market`
+- `opportunity_visibility`
+- `opportunity_edge`
+- `expression_edge`
+- `execution`
+- `outcome`
+- `evidence`
+
+Use the primary layer, not every downstream effect. For example:
+
+- A distribution-day gate experiment belongs to `opportunity_visibility`.
+- A confirmation-threshold experiment belongs to `opportunity_edge`.
+- A strike-selection experiment belongs to `expression_edge`.
+- An exit-rule experiment belongs to `execution`.
+
+This makes the research archive navigable by decision-pipeline layer rather than only by chronology or strategy version.
 
 ## Decision Status
 

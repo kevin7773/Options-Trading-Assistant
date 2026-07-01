@@ -151,6 +151,118 @@ Future strategy selection should separate two different kinds of edge:
 
 v4.2 prospective evidence primarily calibrates Opportunity Edge. Trade expression comes later, after the project understands which market, sector, stock, confirmation, and construction features actually predict quality.
 
+## Decision Pipeline
+
+The project now treats the trading engine as a decision pipeline, not just a scanner:
+
+```text
+Market
+  |
+  v
+Opportunity Visibility
+  |
+  v
+Opportunity Edge
+  |
+  v
+Expression Edge
+  |
+  v
+Execution
+  |
+  v
+Outcome
+  |
+  v
+Evidence
+```
+
+This pipeline is strategy-agnostic. It should remain meaningful even if the production expression changes from bull call spreads to a different strategy family.
+
+### Layer Questions
+
+- `Market`
+  Question: should the system participate today at all?
+- `Opportunity Visibility`
+  Question: is the system allowing itself to inspect enough opportunities?
+- `Opportunity Edge`
+  Question: among visible candidates, which opportunities are genuinely good?
+- `Expression Edge`
+  Question: given a good opportunity, what is the best way to express it?
+- `Execution`
+  Question: can the system realize the theoretical edge?
+- `Outcome`
+  Question: what actually happened after the decision?
+- `Evidence`
+  Question: what should the project learn from the realized outcome?
+
+### Layer Objectives
+
+Each layer should optimize a distinct objective and should not silently absorb the job of another layer.
+
+- `Market`: avoid structurally hostile environments.
+- `Opportunity Visibility`: maximize opportunity recall without abandoning risk discipline.
+- `Opportunity Edge`: maximize opportunity precision.
+- `Expression Edge`: maximize risk-adjusted payoff.
+- `Execution`: maximize edge realization.
+- `Outcome`: preserve the factual result without revisionism.
+- `Evidence`: convert outcomes into durable research knowledge.
+
+### Layer Boundaries
+
+This distinction prevents hypothesis mixing.
+
+- Relaxing a market gate is not an opportunity-edge hypothesis. It is an opportunity-visibility hypothesis.
+- Increasing confirmation requirements is not an options hypothesis. It is an opportunity-edge hypothesis.
+- Adding a new spread family is not a stock-ranking hypothesis. It is an expression-edge hypothesis.
+- Changing exits is not a setup-quality hypothesis. It is an execution hypothesis.
+
+`H-008` is the first clear opportunity-visibility hypothesis in the project. Its importance is larger than the rule itself because it exposed a reusable architectural layer: visibility is not the same thing as quality.
+
+### Single-Layer Hypothesis Rule
+
+Each hypothesis should modify only one architectural layer unless there is a compelling reason otherwise.
+
+This is a research-discipline rule, not a coding preference.
+
+The reason is causal clarity:
+
+- If one hypothesis changes visibility, opportunity ranking, and expression at the same time, an improvement cannot be attributed cleanly.
+- If one hypothesis isolates a single layer, the mechanism of improvement or failure becomes explainable.
+
+`H-008` is strong evidence for this rule. It was valuable not only because it improved retrospective results, but because it isolated the visibility layer well enough to show *why* the results changed.
+
+Multi-layer experiments are still allowed when necessary, but they should be treated as exceptional and justified explicitly in the hypothesis, manifest, and review notes.
+
+### Research Loop
+
+Most trading systems stop at execution. This project explicitly continues into outcome and evidence.
+
+- `Outcome` closes the trading loop.
+- `Evidence` closes the research loop.
+
+That is why immutable packets, forward validation, experiment manifests, and registry decisions are part of the architecture rather than just reporting convenience.
+
+## Architecture Stability
+
+This document should now be treated as a near-frozen constitution in the same spirit as the v4.2 baseline.
+
+That does not mean it is immutable. It means changes should be rare and driven by genuinely new architectural insight rather than local implementation detail, short-term convenience, or one-off experimental results.
+
+Good reasons to change this document include:
+
+- discovery of a new durable research layer
+- a better project-wide decision taxonomy
+- a new evidence-governance principle
+- a structural boundary change that affects multiple strategy families
+
+Bad reasons to change this document include:
+
+- tuning a threshold
+- describing temporary implementation detail
+- documenting one experiment result that does not alter the project model
+- compensating for missing code comments or command help
+
 ## Module Boundaries
 
 ### `options_trading_assistant.models`

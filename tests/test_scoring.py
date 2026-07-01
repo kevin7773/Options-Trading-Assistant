@@ -1,6 +1,7 @@
 from datetime import date
 
 from options_trading_assistant.config import load_config
+from options_trading_assistant.engines.distribution_days import evaluate_distribution_days_from_rows, rule_from_market_config
 from options_trading_assistant.engines.scoring import (
     build_score_breakdown,
     grade_for_score,
@@ -62,6 +63,53 @@ def test_market_block_reason_honors_volatility_proxy_risk_off():
     reason = market_block_reason(snapshot, config.strategy["market"])
 
     assert reason == "VIXY volatility proxy is signaling risk-off conditions."
+
+
+def test_distribution_day_rule_current_2_in_10_triggers_on_two_nonconsecutive_days():
+    rule = rule_from_market_config(load_config().strategy["market"])
+    rows = [
+        {"date": date(2026, 6, 20), "close": 100, "volume": 100},
+        {"date": date(2026, 6, 21), "close": 99, "volume": 120},
+        {"date": date(2026, 6, 22), "close": 101, "volume": 110},
+        {"date": date(2026, 6, 23), "close": 100, "volume": 130},
+    ]
+
+    state = evaluate_distribution_days_from_rows(
+        rows,
+        close_names=["close"],
+        volume_names=["volume"],
+        date_names=["date"],
+        rule=rule,
+    )
+
+    assert state.count_in_window == 2
+    assert state.triggered is True
+
+
+def test_distribution_day_rule_consecutive_only_requires_adjacent_flags():
+    rule = {
+        "lookback_bars": 10,
+        "max_count_in_window": 2,
+        "require_consecutive": True,
+        "min_drop_pct": 0.2,
+    }
+    rows = [
+        {"date": date(2026, 6, 20), "close": 100, "volume": 100},
+        {"date": date(2026, 6, 21), "close": 99, "volume": 120},
+        {"date": date(2026, 6, 22), "close": 101, "volume": 110},
+        {"date": date(2026, 6, 23), "close": 100, "volume": 130},
+    ]
+
+    state = evaluate_distribution_days_from_rows(
+        rows,
+        close_names=["close"],
+        volume_names=["volume"],
+        date_names=["date"],
+        rule=rule_from_market_config({"distribution_days": rule, "max_distribution_days": 2}),
+    )
+
+    assert state.count_in_window == 2
+    assert state.triggered is False
 
 
 def test_score_options_zeroes_spread_with_poor_reward_to_risk():

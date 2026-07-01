@@ -28,6 +28,11 @@ market:
   require_spy_above_20dma: true
   max_vix_if_rising: 22
   max_distribution_days: 2
+  distribution_days:
+    lookback_bars: 10
+    max_count_in_window: 2
+    require_consecutive: false
+    min_drop_pct: 0.2
 
 trade:
   min_days_to_expiration: 21

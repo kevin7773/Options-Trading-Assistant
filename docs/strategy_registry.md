@@ -49,6 +49,26 @@ Rejected hypotheses are institutional knowledge. They should remain in the regis
 
 Material tests should also create an experiment manifest under `research/experiments/`. The manifest records datasets, artifacts, metrics, success criteria, failure criteria, and the final decision.
 
+## Research Layers
+
+The strategy now distinguishes five research layers:
+
+1. `Market`: broad regime and hard-stop context.
+2. `Opportunity Visibility`: whether gating allows the engine to inspect the day instead of shutting it out.
+3. `Opportunity Edge`: whether the ranked setups are actually good once they are visible.
+4. `Expression Edge`: whether the options structure expresses the setup well.
+5. `Execution`: whether entries, exits, and management realize the edge.
+
+This distinction matters because not every improvement changes the same layer.
+
+- `H-001` is primarily a market-layer hypothesis.
+- `H-008` is primarily an opportunity-visibility hypothesis.
+- Stock-ranking and setup-quality hypotheses belong to opportunity edge.
+- Strike selection, spread width, reachability, and debit structure belong to expression edge.
+- Lifecycle exits and trade handling belong to execution.
+
+When a new hypothesis is proposed, identify its primary layer before testing it. This reduces category confusion and makes mechanism claims easier to evaluate.
+
 ## Registry
 
 | ID | Hypothesis | Status | Baseline | Evidence | Decision |
@@ -60,6 +80,7 @@ Material tests should also create an experiment manifest under `research/experim
 | H-005 | Semiconductors require the tested high-beta recovery profile. | Rejected | v4.2 | `EXP-2026-001`: expectancy declined, drawdown worsened, and semiconductor losses increased. | Do not promote this profile; open a new hypothesis for any different semiconductor treatment. |
 | H-006 | Pre-entry scores, rejection context, and skipped environments can predict future trade quality. | Active | v4.2 | Prospective decision packets now record measurement-only features before outcomes are known. | Collect data only; compare recommendations, near-misses, and sit-out environments before changing rules. |
 | H-007 | Mean-reversion recovery may exhibit higher expectancy within precious-metal equities. | Proposed | v4.2 | Observation only: Gold and precious-metal equities materially outperformed during the research period. | Do not implement; first run a measurement-only gold-slice review to determine whether better mean-reversion opportunities existed. |
+| H-008 | Consecutive distribution-day selling identifies deteriorating market regimes better than a rolling cumulative count. | Active | v4.2 | `EXP-2026-002`: retrospective backtest improved expectancy, trade count, and multi-sector participation versus the 2-in-10 baseline. | Freeze as an active research hypothesis; require holdout or prospective confirmation before promotion. |
 | H-012 | Cloud / SaaS is a priority research sector for this strategy family. | Active | v4.2 | Strong small-sample results across v4.2 balanced and high-probability comparisons. | Track as a canary sector; do not overweight production yet. |
 | H-013 | Universe v2 metadata improves research quality by making ticker treatment explicit. | Active | v4.2 | Universe v2 backtest completed with 182 scan stocks and positive expectancy. | Keep Universe v2 as active research asset. |
 
@@ -206,16 +227,56 @@ promotion_blockers:
   - No production scan eligibility without a research hypothesis, experiment manifest, and promotion gate.
 ```
 
+## H-008 Research Plan
+
+H-008 tests whether the pattern of institutional selling matters more than the cumulative count for a short-horizon bullish options system.
+
+```yaml
+hypothesis_id: H-008
+name: distribution_day_gate_calibration
+status: active
+baseline: v4.2
+
+baseline_rule:
+  lookback_bars: 10
+  max_count_in_window: 2
+  require_consecutive: false
+
+candidate_rule:
+  lookback_bars: 10
+  max_count_in_window: 2
+  require_consecutive: true
+
+question: >
+  Does consecutive institutional selling identify deteriorating market regimes
+  more effectively than cumulative selling within a rolling window?
+
+retrospective_findings:
+  experiment: EXP-2026-002
+  baseline_expectancy: 42.93
+  candidate_expectancy: 60.33
+  baseline_trade_count: 82
+  candidate_trade_count: 148
+  baseline_max_drawdown: -645.48
+  candidate_max_drawdown: -645.48
+
+promotion_requirements:
+  - Improvement must persist across 2024, 2025, and 2026 YTD.
+  - Improvement must not rely on one sector alone.
+  - Newly admitted trade dates must contribute positive expectancy.
+  - Holdout or prospective evidence is required before promotion.
+```
+
 ## Candidate v4.3 Research Hypotheses
 
 These ideas are explicitly research-only. They must not modify v4.2 prospective tracking.
 
 | ID | Hypothesis | Test Shape | Promotion Concern |
 |---|---|---|---|
-| H-008 | A different semiconductor treatment may improve results after H-005 failed. | Declare a new profile before testing; do not reuse the failed H-005 assumptions. | Must explain why it should avoid the H-005 failure mode. |
 | H-009 | Expected-move-based strike selection improves spread construction durability. | Compare fixed moneyness versus expected-move-derived long strike placement. | Must improve expectancy without reducing trade count below promotion gate. |
 | H-010 | Sector-collapse exits reduce losses after the original sector thesis fails. | Compare lifecycle outcomes with and without stricter post-entry sector deterioration exits. | Must reduce drawdown without cutting winners too early. |
 | H-011 | Improved synthetic option pricing changes trade selection quality. | Replace v1 pricing assumptions with calibrated IV/expected-move/debit estimates and compare identical signals. | Must separate pricing improvement from strategy-rule changes. |
+| H-014 | A different semiconductor treatment may improve results after H-005 failed. | Declare a new profile before testing; do not reuse the failed H-005 assumptions. | Must explain why it should avoid the H-005 failure mode. |
 
 ## Change Control
 

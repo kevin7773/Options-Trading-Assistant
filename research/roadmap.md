@@ -35,6 +35,20 @@ Until that loop completes, the priority is evidence quality over strategy change
 - Produce the first month-end gate-effectiveness table using matured 5-day and 21-day SPY outcomes.
 - Do not promote v4.3 changes during the initial evidence-collection window.
 
+## Research Layer Model
+
+Current research should classify each hypothesis by the layer it is trying to improve:
+
+- `Market`: regime detection and hard stops.
+- `Opportunity Visibility`: whether the engine is allowed to inspect a day at all.
+- `Opportunity Edge`: whether the visible setups are actually good.
+- `Expression Edge`: whether the option structure expresses the setup efficiently.
+- `Execution`: whether trade handling captures the available edge.
+
+This matters because the project now has evidence that these are not interchangeable.
+
+`H-008` showed that a rule can improve results by recovering visibility without directly changing setup quality or spread construction. Future ideas should be framed at the correct layer before backtesting or promotion review.
+
 ## August 2026
 
 - Review the first meaningful forward dataset.

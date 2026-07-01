@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from math import floor
 
+from options_trading_assistant.engines.distribution_days import rule_from_market_config
 from options_trading_assistant.models import (
     MarketSnapshot,
     OptionSpread,
@@ -33,7 +34,7 @@ def score_market(snapshot: MarketSnapshot, market_config: dict) -> float:
         snapshot.vix > market_config["max_vix_if_rising"] and snapshot.vix_rising
     )
     score += 5.0 if not volatility_is_hostile else 0.0
-    score += 4.0 if snapshot.distribution_days < market_config["max_distribution_days"] else 0.0
+    score += 4.0 if not snapshot.distribution_day_triggered else 0.0
     score += 4.0 * clamp(snapshot.breadth_score)
     score += 3.0 * clamp(snapshot.growth_participation_score)
     return round(score, 2)
@@ -48,7 +49,10 @@ def market_block_reason(snapshot: MarketSnapshot, market_config: dict) -> str | 
         return f"{snapshot.volatility_source} volatility proxy is signaling risk-off conditions."
     if snapshot.vix > market_config["max_vix_if_rising"] and snapshot.vix_rising:
         return "VIX is above the configured limit and rising."
-    if snapshot.distribution_days >= market_config["max_distribution_days"]:
+    distribution_rule = rule_from_market_config(market_config)
+    if snapshot.distribution_day_triggered:
+        if distribution_rule.require_consecutive:
+            return "Consecutive distribution days reached the configured limit."
         return "Distribution-day count is at or above the configured limit."
     if snapshot.breadth_score < 0.35:
         return "Market breadth is sharply negative."

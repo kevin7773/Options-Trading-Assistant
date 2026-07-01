@@ -109,6 +109,7 @@ def test_backtest_runner_writes_artifacts_and_summary(tmp_path):
     assert result.sit_out_count == 1
     assert result.summary["win_rate"] == 1.0
     assert result.summary["expectancy"] == 180.0
+    assert result.summary["distribution_day_rule"]["blocked_scan_count"] == 0
     assert (tmp_path / "test-run" / "summary.json").exists()
     assert (tmp_path / "test-run" / "trades.jsonl").exists()
     assert (tmp_path / "test-run" / "scan_results.jsonl").exists()
@@ -191,3 +192,41 @@ def test_h005_scenario_adds_semiconductor_sector_profile_only():
     assert profile["preferred_long_strike"] == "atm"
     assert profile["pullback_range"] == [7, 15]
     assert "Cloud / SaaS" not in config.strategy["sector_profiles"]
+
+
+def test_backtest_summary_tracks_distribution_block_follow_through(tmp_path):
+    class DistributionBlockProvider(ScriptedBacktestProvider):
+        def available_dates(self, start, end):
+            return [start, start + timedelta(days=1), start + timedelta(days=2)]
+
+        def get_market_snapshot(self, as_of):
+            if as_of == date(2026, 1, 2):
+                return MarketSnapshot(
+                    as_of=as_of,
+                    spy_above_20dma=True,
+                    nasdaq_above_20dma=True,
+                    vix=12,
+                    vix_rising=False,
+                    distribution_days=2,
+                    breadth_score=0.8,
+                    growth_participation_score=0.8,
+                    distribution_day_triggered=True,
+                )
+            return super().get_market_snapshot(as_of)
+
+    result = run_backtest(
+        config=load_config(),
+        provider=DistributionBlockProvider(),
+        mode="balanced",
+        start=date(2026, 1, 2),
+        end=date(2026, 1, 4),
+        output_root=tmp_path,
+        run_id="distribution-rule-follow-through",
+        detailed_artifacts=False,
+    )
+
+    distribution = result.summary["distribution_day_rule"]
+
+    assert distribution["blocked_scan_count"] == 1
+    assert distribution["follow_on_scan_count"] == 1
+    assert distribution["follow_on_trade_count"] == 1

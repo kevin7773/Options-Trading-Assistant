@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 from datetime import date, datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ from options_trading_assistant.backtesting.diagnostics import (
 )
 from options_trading_assistant.backtesting.engine import run_backtest
 from options_trading_assistant.backtesting.scenarios import get_scenario, scenario_names
-from options_trading_assistant.config import load_config
+from options_trading_assistant.config import AppConfig, load_config
 from options_trading_assistant.engines.cooling_off import CoolingOffTracker
 from options_trading_assistant.engines.scanner import DailyScanner
 from options_trading_assistant.engines.scoring import (
@@ -128,6 +129,15 @@ def parse_args() -> argparse.Namespace:
     daily_report.add_argument("--date", dest="as_of", default=None, help="Report date in YYYY-MM-DD format.")
     daily_report.add_argument("--no-log", action="store_true", help="Do not append JSONL or decision packets.")
 
+    h008_shadow = subparsers.add_parser(
+        "h008-shadow-scan",
+        help="Run the H-008 shadow candidate without changing the frozen v4.2 baseline journals.",
+    )
+    h008_shadow.add_argument("--provider", default=None, help="Data provider: mock or moomoo.")
+    h008_shadow.add_argument("--mode", default=None, help="Scanner mode: conservative, balanced, or aggressive.")
+    h008_shadow.add_argument("--date", dest="as_of", default=None, help="Shadow scan date in YYYY-MM-DD format.")
+    h008_shadow.add_argument("--no-log", action="store_true", help="Do not append H-008 shadow JSONL or decision packets.")
+
     dashboard = subparsers.add_parser("dashboard", help="Build a local HTML dashboard for reports and decision packets.")
     dashboard.add_argument("--serve", action="store_true", help="Serve the dashboard at a local URL after building it.")
     dashboard.add_argument("--host", default="127.0.0.1", help="Host for --serve.")
@@ -163,6 +173,28 @@ def parse_args() -> argparse.Namespace:
     scenarios.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
     scenarios.add_argument("--scenarios", default="all", help="Comma-separated scenarios or 'all'.")
     scenarios.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Write summary and trades without per-scan journals or decision packets.",
+    )
+
+    distribution_rules = subparsers.add_parser(
+        "backtest-distribution-rules",
+        help="Compare distribution-day rule variants over the same historical window.",
+    )
+    distribution_rules.add_argument("--start", required=True, help="Backtest start date in YYYY-MM-DD format.")
+    distribution_rules.add_argument("--end", required=True, help="Backtest end date in YYYY-MM-DD format.")
+    distribution_rules.add_argument("--mode", default=None, help="Scanner mode, usually balanced.")
+    distribution_rules.add_argument("--data-source", choices=("cache", "massive"), default="cache", help="Historical data source.")
+    distribution_rules.add_argument("--cache-dir", default=None, help="Historical data cache directory.")
+    distribution_rules.add_argument("--vix-proxy", default="VIXY", help="Ticker to use as the VIX/risk proxy.")
+    distribution_rules.add_argument("--calls-per-minute", type=int, default=5, help="Massive API call limit.")
+    distribution_rules.add_argument(
+        "--scenario",
+        default="balanced",
+        help="Backtest scenario: balanced, high_probability, aggressive, semiconductor_high_beta_recovery.",
+    )
+    distribution_rules.add_argument(
         "--summary-only",
         action="store_true",
         help="Write summary and trades without per-scan journals or decision packets.",
@@ -711,6 +743,64 @@ def run_daily_report(args: argparse.Namespace) -> None:
     print(f"Saved HTML email report to: {html_path}")
 
 
+def run_h008_shadow_scan(args: argparse.Namespace) -> None:
+    base_config = load_config()
+    selected_mode = args.mode or base_config.strategy["default_mode"]
+    selected_provider = args.provider or base_config.broker["active_provider"]
+    as_of = parse_scan_date(args.as_of)
+    shadow_config = config_with_distribution_rule(
+        base_config,
+        {
+            "lookback_bars": 10,
+            "max_count_in_window": 2,
+            "require_consecutive": True,
+            "min_drop_pct": 0.2,
+        },
+    )
+
+    provider = build_provider(selected_provider, shadow_config)
+    try:
+        scanner = DailyScanner(
+            config=shadow_config,
+            provider=provider,
+            cooling_off_tracker=CoolingOffTracker.from_decision_packets(shadow_config),
+        )
+        result = scanner.run(
+            mode=selected_mode,
+            as_of=as_of,
+            include_all_signal_rankings=True,
+        )
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+    shadow_root = Path("data") / "research" / "h008"
+    packet_paths = []
+    if not args.no_log:
+        append_scan_result(result, journal_dir=shadow_root / "journal")
+        packet_paths = write_decision_packets(result, output_dir=shadow_root / "decision_packets")
+        if scanner.last_signal_result is not None:
+            write_signal_ranking_snapshot(scanner.last_signal_result, output_dir=shadow_root / "signal_rankings")
+
+    report_content = "\n".join(
+        [
+            "# H-008 Shadow Daily Report",
+            "",
+            "Candidate rule: 2 consecutive distribution days in a 10-session lookback.",
+            "",
+            format_result(result),
+            format_report_footer(result, len(packet_paths)),
+        ]
+    )
+    report_dir = shadow_root / "reports" / "daily"
+    report_path = write_daily_report(as_of, report_content, output_dir=report_dir)
+    html_path = write_daily_report_html(as_of, format_daily_report_html(result, len(packet_paths)), output_dir=report_dir)
+    print(report_content)
+    print(f"\nSaved H-008 shadow report to: {report_path}")
+    print(f"Saved H-008 shadow HTML report to: {html_path}")
+
+
 def run_dashboard(args: argparse.Namespace) -> None:
     path = build_dashboard()
     print(f"Built dashboard: {path}")
@@ -794,6 +884,111 @@ def run_backtest_scenarios(args: argparse.Namespace) -> None:
         )
         results.append(result)
     print(format_scenario_comparison(results))
+
+
+DISTRIBUTION_RULE_PRESETS = {
+    "current_2_in_10": {
+        "lookback_bars": 10,
+        "max_count_in_window": 2,
+        "require_consecutive": False,
+        "min_drop_pct": 0.2,
+    },
+    "proposed_2_in_5": {
+        "lookback_bars": 5,
+        "max_count_in_window": 2,
+        "require_consecutive": False,
+        "min_drop_pct": 0.2,
+    },
+    "original_2_consecutive": {
+        "lookback_bars": 10,
+        "max_count_in_window": 2,
+        "require_consecutive": True,
+        "min_drop_pct": 0.2,
+    },
+}
+
+
+def run_backtest_distribution_rules(args: argparse.Namespace) -> None:
+    base_config = load_config()
+    mode = args.mode or base_config.strategy["default_mode"]
+    start = parse_scan_date(args.start)
+    end = parse_scan_date(args.end)
+    cache_dir = Path(args.cache_dir) if args.cache_dir else None
+    scenario = get_scenario(args.scenario)
+    results = []
+    for label, rule in DISTRIBUTION_RULE_PRESETS.items():
+        config = config_with_distribution_rule(base_config, rule)
+        if args.data_source == "massive":
+            provider = HistoricalDataProvider.from_massive(
+                config=config,
+                start=start,
+                end=end,
+                cache_dir=cache_dir,
+                calls_per_minute=args.calls_per_minute,
+                vix_proxy=args.vix_proxy,
+                scenario=scenario,
+            )
+        else:
+            provider = HistoricalDataProvider.from_cache(
+                config=config,
+                cache_dir=cache_dir,
+                vix_proxy=args.vix_proxy,
+                scenario=scenario,
+            )
+        result = run_backtest(
+            config=config,
+            provider=provider,
+            mode=mode,
+            start=start,
+            end=end,
+            run_id=f"{label}-{start}-{end}",
+            scenario=scenario,
+            detailed_artifacts=not args.summary_only,
+        )
+        result.summary["distribution_rule_label"] = label
+        result.summary["distribution_rule_config"] = rule
+        results.append(result)
+    print(format_distribution_rule_comparison(results))
+
+
+def config_with_distribution_rule(config: AppConfig, rule: dict) -> AppConfig:
+    strategy = deepcopy(config.strategy)
+    strategy["market"]["distribution_days"] = dict(rule)
+    strategy["market"]["max_distribution_days"] = int(rule["max_count_in_window"])
+    return AppConfig(
+        strategy=strategy,
+        scoring=deepcopy(config.scoring),
+        universe=deepcopy(config.universe),
+        broker=deepcopy(config.broker),
+    )
+
+
+def format_distribution_rule_comparison(results) -> str:
+    lines = [
+        "Distribution-Day Rule Comparison",
+        "Rule | Scans | Trades | Sit-outs | Expectancy | Max DD | Dist Blocks | Next-Day Trades | Next-Day Exp | Artifacts",
+        "--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---",
+    ]
+    for result in results:
+        summary = result.summary
+        distribution = summary.get("distribution_day_rule", {})
+        lines.append(
+            " | ".join(
+                [
+                    str(summary.get("distribution_rule_label", "unknown")),
+                    str(summary["scan_count"]),
+                    str(summary["trade_count"]),
+                    str(summary["sit_out_count"]),
+                    f"${summary['expectancy']:.2f}",
+                    f"${summary['max_drawdown']:.2f}",
+                    str(distribution.get("blocked_scan_count", 0)),
+                    str(distribution.get("follow_on_trade_count", 0)),
+                    f"${distribution.get('follow_on_expectancy', 0):.2f}",
+                    result.output_dir,
+                ]
+            )
+        )
+    return "\n".join(lines)
 
 
 def format_scenario_comparison(results) -> str:
@@ -1174,12 +1369,16 @@ def main() -> None:
             run_packet_review(args)
         elif args.command == "daily-report":
             run_daily_report(args)
+        elif args.command == "h008-shadow-scan":
+            run_h008_shadow_scan(args)
         elif args.command == "dashboard":
             run_dashboard(args)
         elif args.command == "backtest":
             run_historical_backtest(args)
         elif args.command == "backtest-scenarios":
             run_backtest_scenarios(args)
+        elif args.command == "backtest-distribution-rules":
+            run_backtest_distribution_rules(args)
         elif args.command == "hydrate-history":
             run_hydrate_history(args)
         elif args.command == "backtest-stock-diagnostics":

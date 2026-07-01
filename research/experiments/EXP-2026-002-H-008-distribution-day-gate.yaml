@@ -1,0 +1,177 @@
+experiment_id: EXP-2026-002
+strategy: v4.3
+baseline: v4.2
+status: completed
+layer: opportunity_visibility
+
+hypotheses:
+  - H-008
+
+name: distribution_day_gate_calibration
+date_started: 2026-07-01
+date_completed: 2026-07-01
+
+owner: Options Trading Assistant
+
+datasets:
+  - name: 2024
+    start: 2024-01-01
+    end: 2024-12-31
+  - name: 2025
+    start: 2025-01-01
+    end: 2025-12-31
+  - name: 2026_ytd
+    start: 2026-01-01
+    end: 2026-07-01
+
+inputs:
+  strategy_config: config/strategy.yaml
+  universe_config: config/universe_v2.yaml
+  baseline_manifest: validation/baselines/v4.2-manifest.json
+  cache_dir: data/historical
+
+baseline_rule:
+  lookback_bars: 10
+  max_count_in_window: 2
+  require_consecutive: false
+  min_drop_pct: 0.2
+
+candidate_rule:
+  lookback_bars: 10
+  max_count_in_window: 2
+  require_consecutive: true
+  min_drop_pct: 0.2
+
+artifacts:
+  backtest_runs:
+    - backtesting/results/h008-baseline-2-in-10
+    - backtesting/results/h008-candidate-2-consecutive
+  validation_reports: []
+  decision_packets:
+    - backtesting/results/h008-baseline-2-in-10/decision_packets
+    - backtesting/results/h008-candidate-2-consecutive/decision_packets
+  lifecycle_reports: []
+
+results:
+  baseline:
+    expectancy: 42.93
+    drawdown: -645.48
+    win_rate: 0.5122
+    trade_count: 82
+    sit_out_count: 589
+    distribution_block_days: 244
+    by_year:
+      2024:
+        trades: 56
+        expectancy: 41.59
+        total_pl: 2328.89
+      2025:
+        trades: 26
+        expectancy: 45.83
+        total_pl: 1191.55
+      2026_ytd:
+        trades: 0
+        expectancy: 0.0
+        total_pl: 0.0
+  candidate:
+    expectancy: 60.33
+    drawdown: -645.48
+    win_rate: 0.5811
+    trade_count: 148
+    sit_out_count: 554
+    distribution_block_days: 62
+    by_year:
+      2024:
+        trades: 71
+        expectancy: 59.15
+        total_pl: 4199.58
+      2025:
+        trades: 71
+        expectancy: 59.49
+        total_pl: 4224.03
+      2026_ytd:
+        trades: 6
+        expectancy: 84.11
+        total_pl: 504.66
+  selected_sector_comparison:
+    Cloud / SaaS:
+      baseline_trades: 14
+      baseline_total_pl: 1248.55
+      candidate_trades: 17
+      candidate_total_pl: 1455.51
+    Communication Services:
+      baseline_trades: 14
+      baseline_total_pl: 527.61
+      candidate_trades: 25
+      candidate_total_pl: 1377.58
+    Healthcare:
+      baseline_trades: 4
+      baseline_total_pl: 199.50
+      candidate_trades: 9
+      candidate_total_pl: 780.62
+    Semiconductors:
+      baseline_trades: 16
+      baseline_total_pl: -758.97
+      candidate_trades: 34
+      candidate_total_pl: 1507.74
+    Utilities:
+      baseline_trades: 2
+      baseline_total_pl: 313.20
+      candidate_trades: 2
+      candidate_total_pl: 313.20
+    Financials:
+      baseline_trades: 9
+      baseline_total_pl: 67.59
+      candidate_trades: 14
+      candidate_total_pl: 358.32
+  mechanism:
+    freed_distribution_block_days: 182
+    freed_days_that_became_buy_days: 36
+    freed_days_that_still_no_traded_setup: 146
+    newly_admitted_trade_dates: 36
+    newly_admitted_trades: 68
+    newly_admitted_total_pl: 5274.30
+    newly_admitted_profitable_trade_dates: 24
+    newly_admitted_losing_or_flat_trade_dates: 12
+    non_buy_reason_after_unblocking: "No setups met the minimum quality threshold."
+  h006_style_features:
+    candidate_all_trades:
+      market_score_raw_avg: 28.37
+      sector_score_avg: 11.13
+      confirmation_count_avg: 2.62
+      stock_setup_score_avg: 35.29
+      distance_to_expected_move_avg: 0.30
+    candidate_newly_admitted_trades:
+      market_score_raw_avg: 28.26
+      sector_score_avg: 11.52
+      confirmation_count_avg: 2.47
+      stock_setup_score_avg: 34.95
+      distance_to_expected_move_avg: 0.25
+
+success_criteria:
+  expectancy_improves_across_2024_2025_2026_ytd: true
+  drawdown_does_not_worsen: true
+  improvements_extend_beyond_one_sector: true
+  newly_admitted_days_positive_on_balance: true
+  holdout_or_prospective_confirmation_required: true
+
+failure_criteria:
+  improvement_concentrated_in_one_year: true
+  improvement_concentrated_in_one_sector: true
+  newly_admitted_days_negative_on_balance: true
+  drawdown_worsens_materially: true
+
+decision:
+  status: inconclusive
+  rationale: >
+    The consecutive distribution-day rule materially improved retrospective
+    expectancy, trade count, and participation across 2024, 2025, and 2026 YTD
+    while holding maximum drawdown flat versus the baseline. The mechanism also
+    appears legitimate: 182 previously blocked days were freed, but only 36 of
+    those days produced trades, and those newly admitted dates contributed
+    5274.30 total P/L. Sector improvement was broad rather than Cloud-only,
+    with especially large gains in Communication Services, Healthcare, and
+    Semiconductors. This is strong retrospective evidence to continue research,
+    but it is not sufficient for promotion without holdout or prospective
+    confirmation.
+  decided_at: 2026-07-01

@@ -65,6 +65,43 @@ Recommendation decision packets also record H-006 measurement-only pre-entry fea
 
 The prospective validation log should keep future outcome columns blank until their horizons mature. This preserves what was known at decision time.
 
+## H-008 Shadow Workflow
+
+H-008 is an active research hypothesis, not a promoted rule change. The frozen v4.2 baseline remains the only production prospective stream.
+
+Historical holdout:
+
+- None predeclared. After the retrospective H-008 evaluation on 2024 through 2026 YTD, no clean untouched historical window remains designated for this hypothesis.
+- Treat H-008 confirmation as a forward-evidence task starting on 2026-07-02 and keep the production baseline unchanged until promotion criteria are met.
+
+Daily shadow collection:
+
+- Run the normal v4.2 daily collection first.
+- Then run the H-008 candidate in shadow mode using the consecutive distribution-day rule.
+- Save H-008 artifacts under `data/research/h008/` only. Do not write them into the v4.2 production journal tree.
+
+Command:
+
+```powershell
+python -m options_trading_assistant.cli h008-shadow-scan `
+  --provider moomoo `
+  --mode balanced `
+  --date (Get-Date -Format "yyyy-MM-dd")
+```
+
+Shadow artifact locations:
+
+- `data/research/h008/journal/scan_results.jsonl`
+- `data/research/h008/decision_packets/`
+- `data/research/h008/signal_rankings/`
+- `data/research/h008/reports/daily/`
+
+Interpretation rules:
+
+- v4.2 remains the live baseline.
+- H-008 shadow outcomes are measurement only.
+- Do not merge, backfill, or rewrite shadow artifacts after creation.
+
 ## Weekly Review
 
 Run every Saturday after the week's daily snapshots are complete.
@@ -124,6 +161,69 @@ python -m options_trading_assistant.cli validate-edge `
   --evidence-kind forward `
   --output-dir data/reports/validation/forward
 ```
+
+For H-008, run the same forward packet validation against the shadow packet root and keep the outputs separate from v4.2:
+
+```powershell
+python -m options_trading_assistant.cli validate-edge `
+  --source packets `
+  --packet-root data/research/h008/decision_packets `
+  --scenario h008-forward `
+  --evidence-kind forward `
+  --output-dir data/reports/validation/h008-forward
+```
+
+H-008 Saturday checklist:
+
+- Confirm the baseline v4.2 run and the H-008 shadow run both exist for each completed trading day since the prior review.
+- Report newly admitted H-008 buy dates: dates where v4.2 sat out but H-008 produced one or more recommendation packets.
+- Report newly admitted H-008 total P/L and count only horizons that have fully matured.
+- Report `Opportunity Recovery Rate` for the review window:
+  - Blocked by v4.2
+  - Allowed by H-008
+  - Passed all downstream filters
+  - Paper trades
+  - Recovery rate = `paper trade dates / H-008-allowed disagreement dates`
+- Use `Opportunity Recovery Rate` to answer:
+  - "When H-008 disagrees with production, how often does that disagreement actually matter?"
+- Compare v4.2 versus H-008 on matured packet outcomes:
+  - trade count
+  - expectancy
+  - max drawdown
+  - win rate
+- Break matured H-008 comparisons down by:
+  - 2024
+  - 2025
+  - 2026 YTD or current year-to-date
+- Break matured H-008 comparisons down by sectors of interest:
+  - Cloud / SaaS
+  - Communication Services
+  - Healthcare
+  - Semiconductors
+  - Utilities
+  - Financials
+- Compare H-006-style pre-entry features for newly admitted H-008 trades versus the v4.2 baseline trade population:
+  - market score
+  - sector score
+  - confirmation count
+  - stock setup score
+  - distance to long strike versus expected move
+- Include a short promotion-readiness block for H-008:
+  - Retrospective Evidence: 1 to 5 stars
+  - Mechanism Understood: 1 to 5 stars
+  - Prospective Evidence: 1 to 5 stars
+  - Promotion Readiness: percentage estimate
+- The percentage is communication, not math. Use it to convey whether the idea appears strong but evidence is still immature.
+- State clearly whether H-008 evidence is still:
+  - insufficient
+  - improving but immature
+  - promotion-eligible
+
+Earliest meaningful H-008 review:
+
+- Do not treat 21 calendar days as sufficient.
+- The earliest serious review is after the first non-trivial H-008 shadow sample has matured through the full 20-trading-day horizon.
+- Promotion still requires broader forward evidence, not one matured cohort.
 
 ## Month-End Gate Effectiveness Review
 

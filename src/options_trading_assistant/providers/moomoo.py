@@ -6,6 +6,7 @@ import socket
 from typing import Any
 
 from options_trading_assistant.config import AppConfig
+from options_trading_assistant.engines.distribution_days import evaluate_distribution_days_from_rows, rule_from_market_config
 from options_trading_assistant.models import (
     MarketSnapshot,
     OptionSpread,
@@ -59,6 +60,13 @@ class MoomooDataProvider(DataProvider):
         breadth_proxy = self._breadth_proxy(as_of)
         growth_proxy = 1.0 if self._last_close(qqq) > self._moving_average(qqq, 20) else 0.35
 
+        distribution_state = evaluate_distribution_days_from_rows(
+            spy,
+            close_names=["close", "last_close", "close_price"],
+            volume_names=["volume"],
+            date_names=["time_key", "date", "time"],
+            rule=rule_from_market_config(self.config.strategy["market"]),
+        )
         return MarketSnapshot(
             as_of=as_of,
             spy_above_20dma=self._last_close(spy) > self._moving_average(spy, 20),
@@ -67,9 +75,10 @@ class MoomooDataProvider(DataProvider):
             vix_rising=volatility["rising"],
             volatility_source=volatility["source"],
             volatility_risk_off=volatility["risk_off"],
-            distribution_days=self._distribution_days(spy),
+            distribution_days=distribution_state.count_in_window,
             breadth_score=breadth_proxy,
             growth_participation_score=growth_proxy,
+            distribution_day_triggered=distribution_state.triggered,
         )
 
     def get_sector_snapshots(self, as_of: date) -> tuple[SectorSnapshot, ...]:
@@ -527,18 +536,6 @@ class MoomooDataProvider(DataProvider):
         return max(0.0, min((closes[-1] - recent_low) / (recent_high - recent_low), 1.0))
 
     @classmethod
-    def _distribution_days(cls, history) -> int:
-        closes = cls._close_series(history)
-        volumes = cls._volume_series(history)
-        count = 0
-        for index in range(max(1, len(closes) - 10), len(closes)):
-            down = closes[index] < closes[index - 1]
-            higher_volume = volumes[index] > volumes[index - 1]
-            large_enough = (closes[index] / closes[index - 1] - 1.0) <= -0.002
-            if down and higher_volume and large_enough:
-                count += 1
-        return count
-
     def _breadth_proxy(self, as_of: date) -> float:
         tickers = ["SPY", "QQQ", "IWM", "DIA"]
         scores = []

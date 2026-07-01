@@ -279,6 +279,7 @@ def summarize_backtest(scans: list[ScanResult], trades: list[BacktestTrade]) -> 
     avg_win = sum(wins) / len(wins) if wins else 0.0
     avg_loss = sum(losses) / len(losses) if losses else 0.0
     expectancy = (win_rate * avg_win) + ((1 - win_rate) * avg_loss) if trade_count else 0.0
+    distribution_block_summary = summarize_distribution_blocks(scans, trades)
     return {
         "scan_count": len(scans),
         "trade_count": trade_count,
@@ -288,9 +289,31 @@ def summarize_backtest(scans: list[ScanResult], trades: list[BacktestTrade]) -> 
         "average_loss": round(avg_loss, 2),
         "expectancy": round(expectancy, 2),
         "max_drawdown": round(max_drawdown([trade.final_pl for trade in trades]), 2),
+        "distribution_day_rule": distribution_block_summary,
         "performance_by_sector": grouped_performance(trades, lambda trade: trade.sector),
         "performance_by_market_regime": grouped_performance(trades, lambda trade: trade.market_regime),
         "performance_by_score_bucket": grouped_performance(trades, lambda trade: trade.score_bucket),
+    }
+
+
+def summarize_distribution_blocks(scans: list[ScanResult], trades: list[BacktestTrade]) -> dict[str, Any]:
+    blocked_indices = [index for index, scan in enumerate(scans) if _is_distribution_day_block(scan)]
+    follow_on_dates = [
+        scans[index + 1].as_of
+        for index in blocked_indices
+        if index + 1 < len(scans)
+    ]
+    follow_on_trades = [trade for trade in trades if trade.entry_date in follow_on_dates]
+    follow_on_expectancy = (
+        sum(trade.final_pl for trade in follow_on_trades) / len(follow_on_trades)
+        if follow_on_trades
+        else 0.0
+    )
+    return {
+        "blocked_scan_count": len(blocked_indices),
+        "follow_on_scan_count": len(follow_on_dates),
+        "follow_on_trade_count": len(follow_on_trades),
+        "follow_on_expectancy": round(follow_on_expectancy, 2),
     }
 
 
@@ -319,6 +342,15 @@ def max_drawdown(pl_series: list[float]) -> float:
         peak = max(peak, equity)
         worst = min(worst, equity - peak)
     return worst
+
+
+def _is_distribution_day_block(scan: ScanResult) -> bool:
+    if scan.action != RecommendationAction.SIT_TODAY_OUT:
+        return False
+    return scan.reason in {
+        "Distribution-day count is at or above the configured limit.",
+        "Consecutive distribution days reached the configured limit.",
+    }
 
 
 def market_regime(result: ScanResult) -> str:
