@@ -88,3 +88,58 @@ def test_history_rejects_short_series_for_long_term_request():
 
     with pytest.raises(MoomooProviderError, match="requested 230, received 30"):
         provider._history("MSFT", date(2026, 6, 26), days=230)
+
+
+def test_call_retries_history_kline_high_frequency(monkeypatch):
+    provider = MoomooDataProvider(load_config())
+    provider.settings = type("Settings", (), {"host": "127.0.0.1", "port": 11111})()
+    provider._history_retry_attempts = 3
+    provider._history_retry_sleep_seconds = 0
+
+    class Quote:
+        def __init__(self):
+            self.calls = 0
+
+        def request_history_kline(self, *args, **kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                return (-1, "Get Historical Candlestick request failed due to high frequency.")
+            return (0, [{"close": 100.0}])
+
+    quote = Quote()
+    provider._quote_ctx = quote
+
+    monkeypatch.setattr("moomoo.RET_OK", 0)
+
+    result = provider._call("request_history_kline", "US.SPY")
+
+    assert result == [{"close": 100.0}]
+    assert quote.calls == 3
+
+
+def test_get_stocks_for_sector_skips_unavailable_ticker():
+    class Provider(MoomooDataProvider):
+        def __init__(self):
+            self.config = type(
+                "Config",
+                (),
+                {
+                    "universe": {
+                        "sectors": {
+                            "Technology": {
+                                "etfs": ["XLK"],
+                                "tickers": ["MSFT", "CYBR"],
+                            }
+                        }
+                    }
+                },
+            )()
+
+        def _history(self, ticker, as_of, days):
+            if ticker == "CYBR":
+                raise MoomooProviderError("Unknown stock. CYBR.")
+            return [{"close": 100.0, "low": 99.0, "high": 101.0, "volume": 1_000_000}] * 230
+
+    stocks = Provider().get_stocks_for_sector("Technology", date(2026, 7, 1))
+
+    assert [stock.ticker for stock in stocks] == ["MSFT"]

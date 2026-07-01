@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 import socket
+import time
 from typing import Any
 
 from options_trading_assistant.config import AppConfig
@@ -30,6 +31,9 @@ class MoomooSettings:
 
 class MoomooDataProvider(DataProvider):
     """Moomoo OpenD-backed, read-only market data provider."""
+
+    _history_retry_attempts = 3
+    _history_retry_sleep_seconds = 15.0
 
     def __init__(self, config: AppConfig):
         broker_config = config.broker["providers"]["moomoo"]
@@ -111,7 +115,10 @@ class MoomooDataProvider(DataProvider):
         sector_history = self._history(sector_config["etfs"][0], as_of, days=230)
         stocks: list[StockSnapshot] = []
         for ticker in sector_config["tickers"]:
-            history = self._history(ticker, as_of, days=230)
+            try:
+                history = self._history(ticker, as_of, days=230)
+            except MoomooProviderError:
+                continue
             stocks.append(
                 StockSnapshot(
                     ticker=ticker,
@@ -229,16 +236,28 @@ class MoomooDataProvider(DataProvider):
             ) from exc
 
         method = getattr(self._quote(), method_name)
-        response = method(*args, **kwargs)
-        if not isinstance(response, tuple) or len(response) < 2:
-            raise MoomooProviderError(f"Moomoo {method_name} returned an unexpected response: {response!r}")
-        ret, data = response[0], response[1]
-        if ret != RET_OK:
+        for attempt in range(1, self._history_retry_attempts + 1):
+            response = method(*args, **kwargs)
+            if not isinstance(response, tuple) or len(response) < 2:
+                raise MoomooProviderError(f"Moomoo {method_name} returned an unexpected response: {response!r}")
+            ret, data = response[0], response[1]
+            if ret == RET_OK:
+                return data
+            if (
+                method_name == "request_history_kline"
+                and attempt < self._history_retry_attempts
+                and "high frequency" in str(data).lower()
+            ):
+                time.sleep(self._history_retry_sleep_seconds)
+                continue
             raise MoomooProviderError(
                 f"Moomoo {method_name} failed: {data}. Confirm Moomoo OpenD is running at "
                 f"{self.settings.host}:{self.settings.port} and the requested data is enabled."
             )
-        return data
+        raise MoomooProviderError(
+            f"Moomoo {method_name} failed after retries. Confirm Moomoo OpenD is running at "
+            f"{self.settings.host}:{self.settings.port} and the requested data is enabled."
+        )
 
     def _diagnose_history(self, ticker: str, as_of: date) -> dict[str, Any]:
         try:
@@ -535,7 +554,6 @@ class MoomooDataProvider(DataProvider):
             return 0.5
         return max(0.0, min((closes[-1] - recent_low) / (recent_high - recent_low), 1.0))
 
-    @classmethod
     def _breadth_proxy(self, as_of: date) -> float:
         tickers = ["SPY", "QQQ", "IWM", "DIA"]
         scores = []
